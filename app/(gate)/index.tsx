@@ -1,12 +1,26 @@
 import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { EmptyState } from '../../src/components/EmptyState';
 import { useSession } from '../../src/hooks/useSession';
+import { hasSupabaseConfig, missingSupabaseConfigMessage } from '../../src/lib/env';
 import { useOnboardingState } from '../../src/state/onboarding.store';
 import { tokens } from '../../src/theme/tokens';
 
 export default function GateScreen() {
   const { session, loading } = useSession();
   const { hasSeenOnboarding, isHydrated } = useOnboardingState(session?.user?.id ?? null);
+
+  if (!hasSupabaseConfig) {
+    return (
+      <View style={styles.loadingScreen}>
+        <EmptyState
+          title="Falta configurar Supabase"
+          subtitle={missingSupabaseConfigMessage}
+          message="Configura esas variables en EAS Secrets o en el perfil de build y vuelve a generar la APK."
+        />
+      </View>
+    );
+  }
 
   if (loading || !isHydrated) {
     return (

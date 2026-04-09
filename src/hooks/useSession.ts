@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { hasSupabaseConfig } from '../lib/env';
 import { supabase } from '../lib/supabase';
 
 export function useSession() {
@@ -6,6 +7,11 @@ export function useSession() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!hasSupabaseConfig) {
+      setLoading(false);
+      return;
+    }
+
     const init = async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session ?? null);
