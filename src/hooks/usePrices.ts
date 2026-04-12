@@ -16,6 +16,8 @@ type UsePricesResult = {
     productId: string;
     storeId: string;
     priceCents: number;
+    quantity?: number | null;
+    unit?: import('../domain/product').ProductUnit | null;
     currency?: string;
     purchasedAt?: string;
   }) => Promise<void>;
@@ -60,6 +62,8 @@ export function usePrices(householdId: string | null): UsePricesResult {
       productId: string;
       storeId: string;
       priceCents: number;
+      quantity?: number | null;
+      unit?: import('../domain/product').ProductUnit | null;
       currency?: string;
       purchasedAt?: string;
     }) => {

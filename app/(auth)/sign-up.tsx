@@ -31,7 +31,7 @@ export default function SignUpScreen() {
         return;
       }
 
-      Alert.alert('Cuenta creada', 'Revisa tu correo si la confirmación está habilitada.', [
+      Alert.alert('Cuenta creada', 'Revisa tu correo para confirmar tu cuenta.', [
         {
           text: 'Aceptar',
           onPress: () => router.replace('/(auth)/sign-in'),
@@ -48,7 +48,7 @@ export default function SignUpScreen() {
     <AuthLayout
       eyebrow="Abre tu cuenta"
       title="Empieza a ahorrar en cada compra."
-      subtitle="Crea tu acceso para organizar hogares, listas y supermercados con una interfaz más clara, más verde y más comercial."
+      subtitle="Crea tu acceso para organizar hogares, listas y tiendas con una interfaz más clara, más verde y más comercial."
       cardTitle="Crear cuenta"
       cardSubtitle="Tardarás un minuto en empezar a usar una app pensada para compras del día a día."
       footer={

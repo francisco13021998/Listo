@@ -10,6 +10,7 @@ import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useProducts } from '../../src/hooks/useProducts';
 import { usePrices } from '../../src/hooks/usePrices';
 import { useStores } from '../../src/hooks/useStores';
+import { getPriceEntryById, updatePriceEntry } from '../../src/services/prices.service';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 import { tokens } from '../../src/theme/tokens';
 
@@ -60,14 +61,20 @@ function normalizeQuantity(quantity: number | null, unit: ProductUnit | '') {
 
 export default function PriceEditorModal() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ productId?: string | string[]; returnTo?: string | string[]; selectedStoreId?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    productId?: string | string[];
+    priceId?: string | string[];
+    returnTo?: string | string[];
+    selectedStoreId?: string | string[];
+  }>();
   const productId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
+  const priceId = Array.isArray(params.priceId) ? params.priceId[0] : params.priceId;
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const selectedStoreIdFromRoute = Array.isArray(params.selectedStoreId) ? params.selectedStoreId[0] : params.selectedStoreId;
   const { activeHouseholdId } = useActiveHousehold();
   const { products } = useProducts(activeHouseholdId);
   const { stores, loading: storesLoading } = useStores(activeHouseholdId);
-  const { addPrice } = usePrices(activeHouseholdId);
+  const { addPrice, refresh: refreshPrices } = usePrices(activeHouseholdId);
   const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownAnchor, setDropdownAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
@@ -76,6 +83,8 @@ export default function PriceEditorModal() {
   const [selectedUnit, setSelectedUnit] = useState<ProductUnit | ''>('');
   const [saving, setSaving] = useState(false);
   const [hasLoadedStores, setHasLoadedStores] = useState(false);
+  const [loadedPriceEntry, setLoadedPriceEntry] = useState(false);
+  const [priceEntryMissing, setPriceEntryMissing] = useState(false);
   const missingStateNotified = useRef(false);
   const appliedStoreSelection = useRef(false);
   const triggerRef = useRef<View>(null);
@@ -84,6 +93,8 @@ export default function PriceEditorModal() {
     if (!productId) return null;
     return products.find((product) => product.id === productId) ?? null;
   }, [productId, products]);
+
+  const isEditingPrice = Boolean(priceId);
 
   const baseQuantity = useMemo(() => parseQuantity(quantityText), [quantityText]);
   const priceValue = useMemo(() => parseQuantity(priceText), [priceText]);
@@ -103,10 +114,11 @@ export default function PriceEditorModal() {
       params: {
         returnTo: '/modals/price-editor',
         productId: productId ?? '',
+        priceId: priceId ?? '',
         finalReturnTo: returnTo ?? '',
       },
     }),
-    [productId, returnTo]
+    [priceId, productId, returnTo]
   );
 
   const sortedStores = useMemo<StoreOption[]>(() => {
@@ -138,11 +150,62 @@ export default function PriceEditorModal() {
   }, [selectedStoreIdFromRoute, sortedStores, storesLoading]);
 
   useEffect(() => {
+    if (isEditingPrice) {
+      return;
+    }
+
     if (!selectedProduct) return;
 
     setQuantityText(selectedProduct.quantity !== null && selectedProduct.quantity !== undefined ? String(selectedProduct.quantity) : '');
     setSelectedUnit(selectedProduct.unit ?? '');
-  }, [selectedProduct]);
+  }, [isEditingPrice, selectedProduct]);
+
+  useEffect(() => {
+    if (!isEditingPrice || !priceId || !activeHouseholdId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadPriceEntry = async () => {
+      setLoadedPriceEntry(false);
+      setPriceEntryMissing(false);
+      try {
+        const entry = await getPriceEntryById({ householdId: activeHouseholdId, priceEntryId: priceId });
+        if (cancelled) return;
+
+        if (!entry) {
+          setPriceEntryMissing(true);
+          setLoadedPriceEntry(true);
+          return;
+        }
+
+        setPriceText((entry.price_cents / 100).toFixed(2).replace('.', ','));
+        setQuantityText(entry.quantity !== null && entry.quantity !== undefined ? String(entry.quantity) : selectedProduct?.quantity !== null && selectedProduct?.quantity !== undefined ? String(selectedProduct.quantity) : '');
+        setSelectedUnit(entry.unit ?? selectedProduct?.unit ?? '');
+
+        if (!selectedStoreIdFromRoute) {
+          setSelectedStoreId(entry.store_id);
+          appliedStoreSelection.current = true;
+        }
+      } catch (err) {
+        if (!cancelled) {
+          void hapticError();
+          Alert.alert('Error al cargar', (err as Error).message);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadedPriceEntry(true);
+        }
+      }
+    };
+
+    void loadPriceEntry();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeHouseholdId, isEditingPrice, priceId, selectedProduct, selectedStoreIdFromRoute]);
 
   const openDropdown = () => {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
@@ -191,11 +254,45 @@ export default function PriceEditorModal() {
     }
 
     const priceCents = Math.round(value * 100);
+    const quantity = parseQuantity(quantityText);
     setSaving(true);
     try {
-      await addPrice({ productId: productId as string, storeId: selectedStoreId, priceCents });
+      if (isEditingPrice) {
+        if (!priceId) {
+          throw new Error('No se pudo identificar el precio a editar');
+        }
+
+        await updatePriceEntry({
+          householdId: activeHouseholdId,
+          priceEntryId: priceId,
+          storeId: selectedStoreId,
+          priceCents,
+          quantity,
+          unit: selectedUnit || null,
+        });
+      } else {
+        await addPrice({
+          productId: productId as string,
+          storeId: selectedStoreId,
+          priceCents,
+          quantity,
+          unit: selectedUnit || null,
+        });
+      }
+
+      await refreshPrices();
       void hapticSuccess();
       if (returnTo) {
+        if (returnTo === '/modals/store-prices') {
+          router.navigate({
+            pathname: returnTo,
+            params: {
+              storeId: selectedStoreId ?? selectedStoreIdFromRoute ?? '',
+            },
+          });
+          return;
+        }
+
         router.replace(returnTo);
         return;
       }
@@ -224,6 +321,26 @@ export default function PriceEditorModal() {
     );
   }
 
+  if (isEditingPrice && !loadedPriceEntry) {
+    return (
+      <Screen scrollable>
+        <SectionCard title="Editar precio" subtitle="Cargando precio seleccionado…">
+          <EmptyState title="Preparando datos" subtitle="Un momento, estamos cargando el precio para editarlo." actionLabel="Cerrar" onAction={() => router.back()} />
+        </SectionCard>
+      </Screen>
+    );
+  }
+
+  if (isEditingPrice && priceEntryMissing) {
+    return (
+      <Screen scrollable>
+        <SectionCard title="Editar precio" subtitle="No se pudo localizar el precio seleccionado.">
+          <EmptyState title="Precio no encontrado" subtitle="El precio pudo haberse eliminado o no existe." actionLabel="Cerrar" onAction={() => router.back()} />
+        </SectionCard>
+      </Screen>
+    );
+  }
+
   if (hasLoadedStores && !storesLoading && sortedStores.length === 0) {
     return (
       <Screen scrollable>
@@ -232,19 +349,19 @@ export default function PriceEditorModal() {
             <Text style={styles.eyebrow}>LISTO</Text>
             <Text style={styles.title}>Añadir precio</Text>
             <Text style={styles.subtitle}>
-              Antes de registrar el precio, crea al menos un supermercado para este hogar.
+              Antes de registrar el precio, crea al menos una tienda para este hogar.
             </Text>
           </View>
 
-          <SectionCard title="Sin supermercados" subtitle="Necesitas crear uno para seguir con el precio del producto.">
+          <SectionCard title="Sin tiendas" subtitle="Necesitas crear una para seguir con el precio del producto.">
             <View style={styles.emptyPanel}>
-              <Text style={styles.emptyPanelTitle}>No hay supermercados creados</Text>
+              <Text style={styles.emptyPanelTitle}>No hay tiendas creadas</Text>
               <Text style={styles.emptyPanelText}>
-                Crea tu primer supermercado y volverás automáticamente a este flujo para guardar el precio.
+                Crea tu primera tienda y volverás automáticamente a este flujo para guardar el precio.
               </Text>
 
               <View style={styles.emptyPanelActions}>
-                <PrimaryButton title="Crear supermercado" onPress={() => router.push(createStoreRoute)} fullWidth />
+                <PrimaryButton title="Crear tienda" onPress={() => router.push(createStoreRoute)} fullWidth />
                 <SecondaryButton title="Cerrar" onPress={() => router.back()} fullWidth />
               </View>
             </View>
@@ -258,18 +375,18 @@ export default function PriceEditorModal() {
     <Screen scrollable>
       <SectionCard
         title="Añadir precio"
-        subtitle="Selecciona un supermercado y registra el precio del producto."
+        subtitle="Selecciona una tienda y registra el precio del producto."
       >
         <View style={styles.form}>
           <View style={styles.storeBlock}>
             <View style={styles.sectionLabelRow}>
-              <Text style={styles.label}>Supermercado</Text>
+              <Text style={styles.label}>Tienda</Text>
               {selectedStoreName ? <Text style={styles.selectedHint}>{selectedStoreName}</Text> : null}
             </View>
 
             {storesLoading ? (
               <View style={styles.loadingCard}>
-                <Text style={styles.loadingText}>Cargando supermercados…</Text>
+                <Text style={styles.loadingText}>Cargando tiendas…</Text>
               </View>
             ) : (
               <View>
@@ -283,7 +400,7 @@ export default function PriceEditorModal() {
                       style={[styles.dropdownButtonText, !selectedStoreName && styles.dropdownButtonPlaceholder]}
                       numberOfLines={1}
                     >
-                      {selectedStoreName ?? 'Selecciona un supermercado'}
+                      {selectedStoreName ?? 'Selecciona una tienda'}
                     </Text>
                     <Text style={styles.dropdownChevron}>{dropdownOpen ? '▴' : '▾'}</Text>
                   </Pressable>
@@ -346,8 +463,8 @@ export default function PriceEditorModal() {
                               <Text style={styles.dropdownCreateIconText}>＋</Text>
                             </View>
                             <View style={styles.dropdownCreateTextBlock}>
-                              <Text style={styles.dropdownCreateTitle}>Crear supermercado</Text>
-                              <Text style={styles.dropdownCreateSubtitle}>Añade uno nuevo y vuelve a este precio.</Text>
+                              <Text style={styles.dropdownCreateTitle}>Crear tienda</Text>
+                              <Text style={styles.dropdownCreateSubtitle}>Añade una nueva y vuelve a este precio.</Text>
                             </View>
                           </Pressable>
                         </View>
@@ -419,7 +536,7 @@ export default function PriceEditorModal() {
           <View style={styles.previewCard}>
             <Text style={styles.previewLabel}>Vista previa</Text>
             <Text style={styles.previewText}>
-              {selectedStoreName ? `Se guardará en ${selectedStoreName}.` : 'Selecciona un supermercado para continuar.'}
+              {selectedStoreName ? `Se guardará en ${selectedStoreName}.` : 'Selecciona una tienda para continuar.'}
             </Text>
             {unitPriceLabel ? <Text style={styles.previewPriceText}>Equivale a {unitPriceLabel}</Text> : null}
             {!unitPriceLabel && (quantityText || selectedUnit) ? (

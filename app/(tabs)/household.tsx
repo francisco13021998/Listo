@@ -1,19 +1,29 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, Alert, Pressable, StyleSheet, Modal } from 'react-native';
+import { View, Text, Alert, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
 import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { SecondaryButton } from '../../src/components/SecondaryButton';
 import { SwipeTabs } from '../../src/components/SwipeTabs';
+import { EmptyState } from '../../src/components/EmptyState';
+import { HouseholdAccessModal } from '../../src/components/household/HouseholdAccessModal';
+import { HouseholdSelectionCard } from '../../src/components/household/HouseholdSelectionCard';
+import { LeaveHouseholdDialog } from '../../src/components/household/LeaveHouseholdDialog';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useHouseholds } from '../../src/hooks/useHouseholds';
 import { useSession } from '../../src/hooks/useSession';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
-import { supabase } from '../../src/lib/supabase';
-import { getHouseholdVisual } from '../../src/theme/visuals';
 import { tokens } from '../../src/theme/tokens';
+
+type AccessMode = 'create' | 'join';
+
+type LeaveDialogState = {
+  open: boolean;
+  target: { id: string; name: string } | null;
+  isDeletingLastMember: boolean;
+};
 
 function formatRemainingTime(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -37,6 +47,8 @@ export default function HouseholdScreen() {
     getHouseholdMemberCount,
     refresh,
   } = useHouseholds();
+  const [accessOpen, setAccessOpen] = useState(false);
+  const [accessMode, setAccessMode] = useState<AccessMode>('create');
   const [newHouseholdName, setNewHouseholdName] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviteExpiresAt, setInviteExpiresAt] = useState<string | null>(null);
@@ -44,10 +56,13 @@ export default function HouseholdScreen() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joiningCode, setJoiningCode] = useState(false);
-  const [selectedHouseholdAction, setSelectedHouseholdAction] = useState<'create' | 'join'>('create');
-  const [deleteForeverOpen, setDeleteForeverOpen] = useState(false);
-  const [deleteForeverName, setDeleteForeverName] = useState('');
-  const [deleteForeverTarget, setDeleteForeverTarget] = useState<{ id: string; name: string } | null>(null);
+  const [openMenuHouseholdId, setOpenMenuHouseholdId] = useState<string | null>(null);
+  const [leaveDialog, setLeaveDialog] = useState<LeaveDialogState>({
+    open: false,
+    target: null,
+    isDeletingLastMember: false,
+  });
+  const [leaveConfirmValue, setLeaveConfirmValue] = useState('');
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
@@ -55,7 +70,11 @@ export default function HouseholdScreen() {
     () => households.find((household) => household.id === activeHouseholdId) ?? null,
     [activeHouseholdId, households]
   );
-  const householdVisual = getHouseholdVisual();
+  const hasHouseholds = households.length > 0;
+
+  const goToShoppingList = () => {
+    router.replace('/(tabs)/list');
+  };
 
   useEffect(() => {
     if (!inviteExpiresAt) {
@@ -86,7 +105,7 @@ export default function HouseholdScreen() {
 
   if (!isHydrated || sessionLoading) {
     return (
-      <Screen>
+      <Screen includeBottomSafeArea={false}>
         <View style={styles.center}>
           <Text style={styles.centerText}>Cargando…</Text>
         </View>
@@ -96,7 +115,7 @@ export default function HouseholdScreen() {
 
   if (!user) {
     return (
-      <Screen>
+      <Screen includeBottomSafeArea={false}>
         <View style={styles.center}>
           <Text style={styles.centerText}>Redirigiendo…</Text>
         </View>
@@ -104,21 +123,61 @@ export default function HouseholdScreen() {
     );
   }
 
+  const openAccessModal = (mode: AccessMode) => {
+    setAccessMode(mode);
+    setAccessOpen(true);
+  };
+
+  const closeAccessModal = () => {
+    setAccessOpen(false);
+  };
+
   const handleCreate = async () => {
     if (!newHouseholdName.trim()) {
       void hapticError();
-      Alert.alert('Nombre requerido', 'Añade un nombre para el hogar');
+      Alert.alert('Nombre requerido', 'Escribe un nombre para tu hogar.');
       return;
     }
+
     try {
       const id = await createHousehold(newHouseholdName.trim());
       void hapticSuccess();
       await setActiveHouseholdId(id);
       await refresh();
       setNewHouseholdName('');
+      setAccessOpen(false);
+      goToShoppingList();
     } catch (err) {
       void hapticError();
-      Alert.alert('Error al crear hogar', (err as Error).message);
+      Alert.alert('No se pudo crear el hogar', (err as Error).message);
+    }
+  };
+
+  const handleJoinByCode = async () => {
+    const trimmedCode = joinCode.trim();
+
+    if (!trimmedCode) {
+      void hapticError();
+      Alert.alert('Código requerido', 'Escribe un código de invitación válido.');
+      return;
+    }
+
+    try {
+      setJoiningCode(true);
+      const householdId = await joinHouseholdByCode(trimmedCode);
+      await setActiveHouseholdId(householdId);
+      void hapticSuccess();
+      setInviteCode(null);
+      setInviteExpiresAt(null);
+      setJoinCode('');
+      setAccessOpen(false);
+      await refresh();
+      goToShoppingList();
+    } catch (err) {
+      void hapticError();
+      Alert.alert('No se pudo entrar al hogar', (err as Error).message);
+    } finally {
+      setJoiningCode(false);
     }
   };
 
@@ -143,30 +202,15 @@ export default function HouseholdScreen() {
     }
   };
 
-  const handleJoinByCode = async () => {
-    const trimmedCode = joinCode.trim();
-
-    if (!trimmedCode) {
-      void hapticError();
-      Alert.alert('Código requerido', 'Introduce un código de invitación válido.');
+  const handleSelectHousehold = async (householdId: string) => {
+    if (householdId === activeHouseholdId) {
+      goToShoppingList();
       return;
     }
 
-    try {
-      setJoiningCode(true);
-      const householdId = await joinHouseholdByCode(trimmedCode);
-      await setActiveHouseholdId(householdId);
-      void hapticSuccess();
-      setInviteCode(null);
-      setInviteExpiresAt(null);
-      setJoinCode('');
-      await refresh();
-    } catch (err) {
-      void hapticError();
-      Alert.alert('No se pudo unir al hogar', (err as Error).message);
-    } finally {
-      setJoiningCode(false);
-    }
+    void hapticTap();
+    await setActiveHouseholdId(householdId);
+    goToShoppingList();
   };
 
   const exitHousehold = async () => {
@@ -175,53 +219,54 @@ export default function HouseholdScreen() {
     void hapticMedium();
     setInviteCode(null);
     setInviteExpiresAt(null);
-    void setActiveHouseholdId(null);
+    await setActiveHouseholdId(null);
   };
 
-  const openPermanentLeaveFlow = async (household: { id: string; name: string }) => {
+  const openLeaveFlow = async (household: { id: string; name: string }) => {
     try {
       const memberCount = await getHouseholdMemberCount(household.id);
-
-      if (memberCount > 1) {
-        Alert.alert(
-          'Salir del hogar',
-          'Salirás de este hogar y necesitarás una nueva invitación para volver a entrar.',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Salir',
-              style: 'destructive',
-              onPress: () => {
-                void handlePermanentLeave(household);
-              },
-            },
-          ]
-        );
-        return;
-      }
-
+      setOpenMenuHouseholdId(null);
       setLeaveError(null);
-      setDeleteForeverName('');
-      setDeleteForeverTarget(household);
-      setDeleteForeverOpen(true);
+      setLeaveConfirmValue('');
+      setLeaveDialog({
+        open: true,
+        target: household,
+        isDeletingLastMember: memberCount <= 1,
+      });
     } catch (err) {
       void hapticError();
       Alert.alert('No se pudo comprobar el hogar', (err as Error).message);
     }
   };
 
-  const handlePermanentLeave = async (household: { id: string; name: string }) => {
+  const closeLeaveDialog = () => {
+    setLeaveDialog({ open: false, target: null, isDeletingLastMember: false });
+    setLeaveConfirmValue('');
+    setLeaveError(null);
+  };
+
+  const toggleHouseholdMenu = (householdId: string) => {
+    setOpenMenuHouseholdId((current) => (current === householdId ? null : householdId));
+  };
+
+  const confirmLeave = async () => {
+    if (!leaveDialog.target) return;
+
+    if (leaveDialog.isDeletingLastMember && leaveConfirmValue.trim() !== leaveDialog.target.name.trim()) {
+      void hapticError();
+      setLeaveError('Escribe exactamente el nombre del hogar para continuar.');
+      return;
+    }
+
     try {
       setLeaveLoading(true);
       setLeaveError(null);
-      await leaveHousehold(household.id);
+      await leaveHousehold(leaveDialog.target.id);
       void hapticSuccess();
-      if (activeHouseholdId === household.id) {
+      if (activeHouseholdId === leaveDialog.target.id) {
         await setActiveHouseholdId(null);
       }
-      setDeleteForeverOpen(false);
-      setDeleteForeverTarget(null);
-      setDeleteForeverName('');
+      closeLeaveDialog();
       await refresh();
     } catch (err) {
       void hapticError();
@@ -231,261 +276,157 @@ export default function HouseholdScreen() {
     }
   };
 
-  const confirmDeleteForever = async () => {
-    if (!deleteForeverTarget) return;
+  const noActiveHero = (
+    <View style={styles.noActiveHeroHeader}>
+      <View style={styles.noActiveHeroContent}>
+        <View style={styles.noActiveHeroBadge}>
+          <Text style={styles.noActiveHeroBadgeText}>Aún no has entrado</Text>
+        </View>
+        <Text style={styles.noActiveHeroTitle}>Elige tu hogar</Text>
+        <Text style={styles.noActiveHeroSubtitle}>Aquí verás los hogares en los que ya estás o podrás crear uno nuevo para empezar.</Text>
+      </View>
+    </View>
+  );
 
-    if (deleteForeverName.trim() !== deleteForeverTarget.name.trim()) {
-      void hapticError();
-      setLeaveError('Escribe exactamente el nombre del hogar para confirmar.');
-      return;
-    }
-
-    await handlePermanentLeave(deleteForeverTarget);
-  };
-
-  const handleLogout = async () => {
-    void hapticMedium();
-    await supabase.auth.signOut();
-    await setActiveHouseholdId(null);
-    router.replace('/(gate)');
-  };
-
-  const handleSelectHousehold = async (householdId: string) => {
-    if (householdId === activeHouseholdId) {
-      return;
-    }
-
-    void hapticTap();
-    await setActiveHouseholdId(householdId);
-  };
+  const activeHero = (
+    <View style={styles.activeHeroHeader}>
+      <View style={styles.activeHeroContent}>
+        <View style={styles.activeHeroBadge}>
+          <Ionicons name="checkmark-circle" size={14} color={tokens.colors.primaryDark} />
+          <Text style={styles.activeHeroBadgeText}>Hogar activo</Text>
+        </View>
+        <Text style={styles.activeHeroTitle}>Ya estás dentro de tu hogar</Text>
+        <Text style={styles.activeHeroSubtitle}>Desde aquí puedes gestionar el hogar que estás usando ahora mismo, invitar a otras personas o cambiar de hogar.</Text>
+      </View>
+    </View>
+  );
 
   return (
-    <Screen scrollable>
+    <Screen scrollable includeBottomSafeArea={false}>
       <SwipeTabs style={styles.page}>
-        <View style={styles.heroHeader}>
-          <View style={styles.heroContent}>
-            <Text style={styles.heroEyebrow}>LISTO</Text>
-            <Text style={styles.heroTitle}>Hogar</Text>
-            <Text style={styles.heroSubtitle}>Gestiona el hogar activo y organiza tus espacios compartidos.</Text>
-          </View>
-          <View style={styles.heroOrbPrimary} />
-          <View style={styles.heroOrbSecondary} />
-        </View>
+        {activeHouseholdId ? activeHero : noActiveHero}
 
         <View style={styles.contentStack}>
           {activeHouseholdId ? (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIconWrap, { backgroundColor: householdVisual.backgroundColor }]}>
-                  <Ionicons name={householdVisual.icon} size={16} color={householdVisual.color} />
-                </View>
-                <View style={styles.sectionTitleBlock}>
-                  <Text style={styles.sectionTitle}>Hogar activo</Text>
-                  <Text style={styles.sectionSubtitle}>{activeHousehold ? activeHousehold.name : 'Hogar activo seleccionado.'}</Text>
-                </View>
-              </View>
-
-              <View style={styles.activeActions}>
-                <Pressable
-                  style={({ pressed }) => [styles.secondaryAction, pressed && styles.secondaryActionPressed]}
-                  onPress={exitHousehold}
-                >
-                  <Text style={styles.secondaryActionText}>Cambiar de hogar</Text>
-                </Pressable>
-
-                <View style={styles.inviteBlock}>
-                  <View style={styles.inviteBlockHeader}>
-                    <View>
-                      <Text style={styles.inviteBlockTitle}>Código de invitación</Text>
-                      <Text style={styles.inviteBlockSubtitle}>Crea un código temporal para que otra persona entre al hogar.</Text>
-                    </View>
+            <>
+              <View style={styles.activeSummaryCard}>
+                <View style={styles.activeSummaryHeader}>
+                  <View style={styles.activeSummaryBadge}>
+                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
+                    <Text style={styles.activeSummaryBadgeText}>Activo</Text>
                   </View>
+                  <Text style={styles.activeSummaryLabel}>Hogar actual</Text>
+                </View>
 
+                <Text style={styles.activeSummaryName}>{activeHousehold ? activeHousehold.name : 'Hogar activo'}</Text>
+                <Text style={styles.activeSummaryText}>Este es el hogar que estás usando ahora mismo.</Text>
+
+                <View style={styles.activeActions}>
                   <Pressable
-                    style={({ pressed }) => [styles.primaryAction, (pressed || inviteLoading) && styles.primaryActionPressed]}
-                    onPress={handleCreateInvitation}
-                    disabled={inviteLoading}
+                    style={({ pressed }) => [styles.secondaryAction, pressed && styles.secondaryActionPressed]}
+                    onPress={exitHousehold}
                   >
-                    <Text style={styles.primaryActionText}>{inviteLoading ? 'Generando…' : 'Crear código de invitación'}</Text>
+                    <Text style={styles.secondaryActionText}>Cambiar de hogar</Text>
                   </Pressable>
 
-                  {inviteCode ? (
-                    <View style={styles.inviteCodeCard}>
-                      <Text style={styles.inviteCodeLabel}>Código activo</Text>
-                      <Text style={styles.inviteCodeValue}>{inviteCode}</Text>
-                      <Text style={styles.inviteCodeHelp}>Caduca en {formatRemainingTime(inviteRemainingSeconds)}. Se desactiva automáticamente.</Text>
+                  <View style={styles.inviteBlock}>
+                    <View style={styles.inviteBlockHeader}>
+                      <View>
+                        <Text style={styles.inviteBlockTitle}>Código para invitar a otra persona</Text>
+                        <Text style={styles.inviteBlockSubtitle}>Crea un código temporal para que alguien pueda entrar a este hogar.</Text>
+                      </View>
                     </View>
-                  ) : null}
+
+                    <Pressable
+                      style={({ pressed }) => [styles.primaryAction, (pressed || inviteLoading) && styles.primaryActionPressed]}
+                      onPress={handleCreateInvitation}
+                      disabled={inviteLoading}
+                    >
+                      <Text style={styles.primaryActionText}>{inviteLoading ? 'Generando…' : 'Crear código'}</Text>
+                    </Pressable>
+
+                    {inviteCode ? (
+                      <View style={styles.inviteCodeCard}>
+                        <Text style={styles.inviteCodeLabel}>Código activo</Text>
+                        <Text style={styles.inviteCodeValue}>{inviteCode}</Text>
+                        <Text style={styles.inviteCodeHelp}>Caduca en {formatRemainingTime(inviteRemainingSeconds)}. Se desactiva automáticamente.</Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
               </View>
-            </View>
-          ) : null}
+            </>
+          ) : (
+            <>
+              <SectionCard title="Tus hogares" subtitle="Aquí verás los hogares en los que ya estás. Toca uno para entrar.">
+                {error ? <Text style={styles.errorText}>{error}</Text> : null}
+                {loading && !hasLoaded ? <Text style={styles.helperText}>Cargando tus hogares…</Text> : null}
 
-          {!activeHouseholdId ? (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeaderCompact}>
-                <View>
-                  <Text style={styles.sectionTitle}>Menú de hogares</Text>
-                  <Text style={styles.sectionSubtitle}>Tienes dos opciones: crear un hogar nuevo o unirte a uno ya creado.</Text>
+                {hasHouseholds ? (
+                  <View style={styles.householdsListModern}>
+                    {households.map((household) => (
+                      <HouseholdSelectionCard
+                        key={household.id}
+                        household={household}
+                        onPress={() => void handleSelectHousehold(household.id)}
+                        onMenuPress={() => toggleHouseholdMenu(household.id)}
+                        onAccess={() => {
+                          setOpenMenuHouseholdId(null);
+                          void handleSelectHousehold(household.id);
+                        }}
+                        onLeave={() => void openLeaveFlow(household)}
+                        menuOpen={openMenuHouseholdId === household.id}
+                        disabled={loading}
+                      />
+                    ))}
+                  </View>
+                ) : !loading ? (
+                  <EmptyState
+                    title="Todavía no tienes ningún hogar"
+                    subtitle="Puedes crear uno nuevo o entrar con un código que te envíe otra persona."
+                    actionLabel="Crear o unirme a un hogar"
+                    onAction={() => openAccessModal('create')}
+                  />
+                ) : null}
+              </SectionCard>
+
+              <SectionCard title="¿Necesitas hacer algo más?" subtitle="Crear o unirte es una opción secundaria. Primero mira si tu hogar ya aparece arriba.">
+                <View style={styles.secondaryBlock}>
+                  <Text style={styles.secondaryBlockText}>Si no ves tu hogar en la lista, aquí puedes crear uno nuevo o entrar con un código.</Text>
+                  <SecondaryButton title="Crear o unirme a un hogar" onPress={() => openAccessModal('create')} fullWidth />
                 </View>
-              </View>
-
-              {error ? <Text style={styles.errorText}>{error}</Text> : null}
-              {loading ? <Text style={styles.helperText}>Cargando hogares…</Text> : null}
-
-              <View style={styles.choiceRow}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setSelectedHouseholdAction('create')}
-                  style={({ pressed }) => [
-                    styles.choiceButton,
-                    selectedHouseholdAction === 'create' && styles.choiceButtonActive,
-                    pressed && styles.choiceButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.choiceButtonText,
-                      selectedHouseholdAction === 'create' && styles.choiceButtonTextActive,
-                    ]}
-                  >
-                    Crear hogar
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => setSelectedHouseholdAction('join')}
-                  style={({ pressed }) => [
-                    styles.choiceButton,
-                    selectedHouseholdAction === 'join' && styles.choiceButtonActive,
-                    pressed && styles.choiceButtonPressed,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.choiceButtonText,
-                      selectedHouseholdAction === 'join' && styles.choiceButtonTextActive,
-                    ]}
-                  >
-                    Unirse por código
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.menuPanel}>
-                {selectedHouseholdAction === 'create' ? (
-                  <View style={styles.menuRow}>
-                    <Text style={styles.menuItemTitle}>Crear hogar</Text>
-                    <Text style={styles.menuItemSubtitle}>Añade un nuevo espacio compartido y selecciónalo al instante.</Text>
-                    <View style={styles.inputShell}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Nombre del hogar"
-                        placeholderTextColor="#98A2B3"
-                        value={newHouseholdName}
-                        onChangeText={setNewHouseholdName}
-                      />
-                    </View>
-                    <Pressable
-                      style={({ pressed }) => [styles.primaryAction, (pressed || loading) && styles.primaryActionPressed]}
-                      onPress={handleCreate}
-                      disabled={loading}
-                    >
-                      <Text style={styles.primaryActionText}>{loading ? 'Creando…' : 'Crear hogar'}</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.menuRow}>
-                    <Text style={styles.menuItemTitle}>Unirse por código</Text>
-                    <Text style={styles.menuItemSubtitle}>Introduce un código válido para entrar en un hogar ya creado.</Text>
-                    <View style={styles.inputShell}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Código de invitación"
-                        placeholderTextColor="#98A2B3"
-                        value={joinCode}
-                        onChangeText={setJoinCode}
-                        autoCapitalize="characters"
-                        autoCorrect={false}
-                      />
-                    </View>
-                    <Pressable
-                      style={({ pressed }) => [styles.primaryAction, (pressed || joiningCode) && styles.primaryActionPressed]}
-                      onPress={handleJoinByCode}
-                      disabled={joiningCode}
-                    >
-                      <Text style={styles.primaryActionText}>{joiningCode ? 'Uniendo…' : 'Unirse al hogar'}</Text>
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-
-              {households.length === 0 && !loading ? <Text style={styles.helperText}>No tienes hogares aún.</Text> : null}
-
-              <View style={styles.householdsList}>
-                {households.map((household) => (
-                  <View key={household.id} style={styles.householdRowShell}>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void handleSelectHousehold(household.id)}
-                      style={({ pressed }) => [styles.householdRow, pressed && styles.householdRowPressed]}
-                    >
-                      <View style={[styles.householdBadge, { backgroundColor: householdVisual.backgroundColor }]}>
-                        <Ionicons name={householdVisual.icon} size={18} color={householdVisual.color} />
-                      </View>
-
-                      <View style={styles.householdTextBlock}>
-                        <Text style={styles.householdName}>{household.name}</Text>
-                      </View>
-
-                      <Text style={styles.householdChevron}>›</Text>
-                    </Pressable>
-
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => void openPermanentLeaveFlow(household)}
-                      style={({ pressed }) => [styles.leaveForeverButton, pressed && styles.leaveForeverButtonPressed]}
-                    >
-                      <Ionicons name="trash-outline" size={14} color="#B42318" />
-                      <Text style={styles.leaveForeverButtonText}>Salir para siempre</Text>
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ) : null}
+              </SectionCard>
+            </>
+          )}
         </View>
       </SwipeTabs>
 
-      <Modal visible={deleteForeverOpen} transparent animationType="fade" onRequestClose={() => setDeleteForeverOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCardShell}>
-            <SectionCard title="Eliminar hogar para siempre" subtitle="Esto borrará el hogar y todos sus productos, supermercados y precios.">
-              <Text style={styles.modalWarningText}>
-                Escribe el nombre exacto de {deleteForeverTarget?.name ?? 'este hogar'} para confirmar la eliminación.
-              </Text>
+      <HouseholdAccessModal
+        visible={accessOpen}
+        mode={accessMode}
+        onClose={closeAccessModal}
+        onChangeMode={setAccessMode}
+        createName={newHouseholdName}
+        onChangeCreateName={setNewHouseholdName}
+        joinCode={joinCode}
+        onChangeJoinCode={setJoinCode}
+        onCreate={() => void handleCreate()}
+        onJoin={() => void handleJoinByCode()}
+        creating={loading}
+        joining={joiningCode}
+      />
 
-              <View style={styles.inputShell}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Nombre del hogar"
-                  placeholderTextColor="#98A2B3"
-                  value={deleteForeverName}
-                  onChangeText={setDeleteForeverName}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                />
-              </View>
-
-              {leaveError ? <Text style={styles.modalErrorText}>{leaveError}</Text> : null}
-
-              <PrimaryButton title={leaveLoading ? 'Eliminando…' : 'Eliminar hogar'} onPress={() => void confirmDeleteForever()} loading={leaveLoading} disabled={leaveLoading} fullWidth />
-              <SecondaryButton title="Cancelar" onPress={() => setDeleteForeverOpen(false)} fullWidth />
-            </SectionCard>
-          </View>
-        </View>
-      </Modal>
+      <LeaveHouseholdDialog
+        visible={leaveDialog.open}
+        householdName={leaveDialog.target?.name ?? ''}
+        isDeletingLastMember={leaveDialog.isDeletingLastMember}
+        confirmValue={leaveConfirmValue}
+        error={leaveError}
+        loading={leaveLoading}
+        onChangeConfirmValue={setLeaveConfirmValue}
+        onConfirm={() => void confirmLeave()}
+        onClose={closeLeaveDialog}
+      />
     </Screen>
   );
 }
@@ -508,28 +449,44 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+  noActiveHeroHeader: {
+    backgroundColor: '#E3F1E6',
+    borderBottomWidth: 1,
+    borderBottomColor: '#CFE3D4',
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 22,
   },
-  modalCardShell: {
-    width: '100%',
-    maxWidth: 520,
+  noActiveHeroContent: {
+    gap: 8,
+    maxWidth: 560,
   },
-  modalWarningText: {
-    color: '#B42318',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
+  noActiveHeroBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#F7FBF8',
+    borderWidth: 1,
+    borderColor: '#CFE4D5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  modalErrorText: {
-    color: '#B42318',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
+  noActiveHeroBadgeText: {
+    color: tokens.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  noActiveHeroTitle: {
+    color: tokens.colors.text,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+  },
+  noActiveHeroSubtitle: {
+    color: '#475467',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+    maxWidth: 560,
   },
   heroHeader: {
     position: 'relative',
@@ -540,7 +497,7 @@ const styles = StyleSheet.create({
     paddingBottom: 42,
   },
   heroContent: {
-    gap: 4,
+    gap: 6,
     maxWidth: 560,
     zIndex: 2,
   },
@@ -552,15 +509,16 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: '#FFFFFF',
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
-    lineHeight: 32,
+    lineHeight: 34,
   },
   heroSubtitle: {
-    color: 'rgba(255,255,255,0.94)',
-    fontSize: 13,
-    lineHeight: 19,
+    color: 'rgba(255,255,255,0.96)',
+    fontSize: 15,
+    lineHeight: 22,
     fontWeight: '600',
+    maxWidth: 520,
   },
   heroOrbPrimary: {
     position: 'absolute',
@@ -580,10 +538,51 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
+  activeHeroHeader: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: tokens.colors.primaryDark,
+    paddingHorizontal: 24,
+    paddingTop: 22,
+    paddingBottom: 34,
+  },
+  activeHeroContent: {
+    gap: 8,
+    maxWidth: 560,
+    zIndex: 2,
+  },
+  activeHeroBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  activeHeroBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  activeHeroTitle: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+  },
+  activeHeroSubtitle: {
+    color: 'rgba(255,255,255,0.94)',
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+    maxWidth: 560,
+  },
   contentStack: {
     marginTop: -18,
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingBottom: 0,
     gap: 14,
   },
   sectionCard: {
@@ -598,38 +597,82 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   },
-  sectionHeader: {
+  activeSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CFE4D5',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  activeSummaryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  sectionHeaderCompact: {
+  activeSummaryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 6,
+    borderRadius: 999,
+    backgroundColor: tokens.colors.primaryDark,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  activeSummaryBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  activeSummaryLabel: {
+    color: '#475467',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  activeSummaryName: {
+    color: '#111827',
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+  },
+  activeSummaryText: {
+    color: '#475467',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  helpIntro: {
+    color: '#344054',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  helperText: {
+    color: '#475467',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  errorText: {
+    color: '#B42318',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  householdsListModern: {
+    gap: 12,
+  },
+  secondaryBlock: {
     gap: 10,
   },
-  sectionIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: tokens.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  sectionTitle: {
-    color: '#111827',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sectionSubtitle: {
-    color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
+  secondaryBlockText: {
+    color: '#475467',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   inviteBlock: {
     gap: 10,
@@ -643,12 +686,13 @@ const styles = StyleSheet.create({
   inviteBlockTitle: {
     color: '#111827',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   inviteBlockSubtitle: {
-    color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
+    color: '#475467',
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
   },
   inviteCodeCard: {
     borderRadius: 16,
@@ -675,69 +719,9 @@ const styles = StyleSheet.create({
   },
   inviteCodeHelp: {
     color: '#166534',
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-  choiceRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  choiceButton: {
-    flex: 1,
-    minHeight: 46,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#D7E9DB',
-    backgroundColor: '#F8FBF8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choiceButtonActive: {
-    borderColor: tokens.colors.primaryDark,
-    backgroundColor: tokens.colors.primarySoft,
-  },
-  choiceButtonPressed: {
-    opacity: 0.92,
-  },
-  choiceButtonText: {
-    color: '#111827',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  choiceButtonTextActive: {
-    color: tokens.colors.primaryDark,
-  },
-  menuPanel: {
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: '#FAFCFA',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  menuRow: {
-    gap: 10,
-  },
-  menuItemTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  menuItemSubtitle: {
-    color: '#667085',
     fontSize: 13,
     lineHeight: 18,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
+    fontWeight: '600',
   },
   primaryAction: {
     minHeight: 48,
@@ -758,139 +742,24 @@ const styles = StyleSheet.create({
   primaryActionText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
   },
   secondaryAction: {
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: '#FFF1F2',
     borderWidth: 1,
-    borderColor: '#FECDD3',
+    borderColor: '#CFE4D5',
+    backgroundColor: '#F7FBF8',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
   secondaryActionPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
   },
   secondaryActionText: {
-    color: '#B42318',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  inputShell: {
-    minHeight: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E4E7EC',
-    backgroundColor: '#FCFDFC',
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  input: {
-    minHeight: 50,
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  inputShell: {
-    minHeight: 52,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E4E7EC',
-    backgroundColor: '#FCFDFC',
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  helperText: {
-    color: '#667085',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  errorText: {
-    color: '#B42318',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  householdsList: {
-    gap: 10,
-  },
-  householdRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F8FAFC',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  householdRowPressed: {
-    opacity: 0.92,
-  },
-  householdRowActive: {
-    borderColor: '#B7E4C3',
-    backgroundColor: '#F2FBF5',
-  },
-  householdRowShell: {
-    gap: 8,
-  },
-  householdBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: tokens.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  householdTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  householdName: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  householdChevron: {
-    color: '#94A3B8',
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
-  leaveForeverButton: {
-    minHeight: 46,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FFF1F2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    shadowColor: '#B42318',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  leaveForeverButtonPressed: {
-    opacity: 0.92,
-  },
-  leaveForeverButtonText: {
-    color: '#B42318',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  activePill: {
     color: tokens.colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '800',
-    backgroundColor: tokens.colors.primarySoft,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

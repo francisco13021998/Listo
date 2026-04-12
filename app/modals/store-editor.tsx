@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
@@ -10,9 +10,7 @@ import { EmptyState } from '../../src/components/EmptyState';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useStores } from '../../src/hooks/useStores';
 import { Store } from '../../src/domain/store';
-import { hapticDelete, hapticError, hapticSuccess } from '../../src/lib/haptics';
-import { hasPrices } from '../../src/services/store.service';
-import { tokens } from '../../src/theme/tokens';
+import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 
 type StoreFormState = {
   name: string;
@@ -36,11 +34,13 @@ export default function StoreEditorModal() {
     storeId?: string | string[];
     returnTo?: string | string[];
     productId?: string | string[];
+    priceId?: string | string[];
     finalReturnTo?: string | string[];
   }>();
   const storeId = Array.isArray(params.storeId) ? params.storeId[0] : params.storeId;
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const returnProductId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
+  const returnPriceId = Array.isArray(params.priceId) ? params.priceId[0] : params.priceId;
   const finalReturnTo = Array.isArray(params.finalReturnTo) ? params.finalReturnTo[0] : params.finalReturnTo;
   const isEditing = Boolean(storeId);
   const [form, setForm] = useState<StoreFormState>(emptyForm());
@@ -112,6 +112,7 @@ export default function StoreEditorModal() {
           pathname: '/modals/price-editor',
           params: {
             productId: returnProductId,
+            priceId: returnPriceId ?? '',
             returnTo: finalReturnTo ?? '',
             selectedStoreId: createdStore.id,
           },
@@ -128,51 +129,10 @@ export default function StoreEditorModal() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!storeId) return;
-
-    try {
-      const existsPrices = await hasPrices(storeId);
-      if (existsPrices) {
-        Alert.alert(
-          'No se puede borrar',
-          'Este supermercado tiene precios asociados. Borra los precios primero.',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            {
-              text: 'Ver precios',
-              onPress: () => router.push({ pathname: '/modals/store-prices', params: { storeId } }),
-            },
-          ]
-        );
-        return;
-      }
-
-      Alert.alert('Eliminar supermercado', 'Esta acción no se puede deshacer.', [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteStore(storeId);
-              void hapticDelete();
-              router.back();
-            } catch (err) {
-              Alert.alert('Error al borrar', (err as Error).message);
-            }
-          },
-        },
-      ]);
-    } catch (err) {
-      Alert.alert('Error al borrar', (err as Error).message);
-    }
-  };
-
   const title = isEditing ? 'Editar tienda' : 'Crear tienda';
   const subtitle = isEditing
-    ? 'Actualiza el nombre del supermercado.'
-    : 'Añade un nuevo supermercado a tu lista.';
+    ? 'Actualiza el nombre de la tienda.'
+    : 'Añade una nueva tienda a tu lista.';
 
   if (!activeHouseholdId) {
     return (
@@ -229,35 +189,32 @@ export default function StoreEditorModal() {
           onChangeText={(text) => setForm((current) => ({ ...current, name: text }))}
         />
 
-        <PrimaryButton title="Guardar" onPress={handleSave} loading={saving} disabled={saving} fullWidth />
         {isEditing ? (
-          <Pressable accessibilityRole="button" onPress={handleDelete} style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}>
-            <Text style={styles.deleteButtonText}>Eliminar supermercado</Text>
-          </Pressable>
-        ) : null}
-        <SecondaryButton title="Cancelar" onPress={() => router.back()} fullWidth />
+          <View style={styles.actionsRow}>
+            <View style={styles.actionItem}>
+              <PrimaryButton title="Guardar" onPress={handleSave} loading={saving} disabled={saving} fullWidth />
+            </View>
+            <View style={styles.actionItem}>
+              <SecondaryButton title="Cancelar" onPress={() => router.back()} fullWidth />
+            </View>
+          </View>
+        ) : (
+          <>
+            <PrimaryButton title="Guardar" onPress={handleSave} loading={saving} disabled={saving} fullWidth />
+            <SecondaryButton title="Cancelar" onPress={() => router.back()} fullWidth />
+          </>
+        )}
       </SectionCard>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  deleteButton: {
-    minHeight: 48,
-    borderRadius: tokens.radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FECACA',
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 16,
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
-  deleteButtonPressed: {
-    opacity: 0.92,
-  },
-  deleteButtonText: {
-    color: '#B42318',
-    fontSize: tokens.typography.button.fontSize,
-    fontWeight: tokens.typography.button.fontWeight,
+  actionItem: {
+    flex: 1,
   },
 });

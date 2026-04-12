@@ -20,13 +20,12 @@ export default function ProfileScreen() {
   const { session } = useSession();
   const { activeHouseholdId } = useActiveHousehold();
 
-  const displayName = session?.user?.user_metadata?.display_name ?? session?.user?.email ?? 'Tu perfil';
-  const subtitle = session?.user?.email ?? 'Cuenta vinculada a LISTO';
+  const email = session?.user?.email ?? 'Sin correo disponible';
 
-  const initials = useMemo(() => getInitials(displayName), [displayName]);
+  const initials = useMemo(() => getInitials(session?.user?.user_metadata?.display_name ?? email), [email, session?.user?.user_metadata?.display_name]);
 
   return (
-    <Screen scrollable>
+    <Screen scrollable includeBottomSafeArea={false}>
       <SwipeTabs style={styles.page}>
         <View style={styles.heroHeader}>
           <Pressable
@@ -41,9 +40,7 @@ export default function ProfileScreen() {
           <View style={styles.heroContent}>
             <Text style={styles.heroEyebrow}>LISTO</Text>
             <Text style={styles.title}>Perfil</Text>
-            <Text style={styles.heroSubtitle}>
-              Consulta tu cuenta y accede a los ajustes desde un espacio más personal.
-            </Text>
+            <Text style={styles.heroSubtitle}>Gestiona tu cuenta y tu sesión.</Text>
           </View>
           <View style={styles.heroOrbPrimary} />
           <View style={styles.heroOrbSecondary} />
@@ -56,8 +53,8 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.profileTextBlock}>
-              <Text style={styles.profileName}>{displayName}</Text>
-              <Text style={styles.profileEmail}>{subtitle}</Text>
+              <Text style={styles.profileName}>Tu cuenta</Text>
+              <Text style={styles.profileEmail}>{email}</Text>
             </View>
           </View>
 
@@ -67,8 +64,8 @@ export default function ProfileScreen() {
                 <Ionicons name="person-outline" size={16} color={tokens.colors.primaryDark} />
               </View>
               <View style={styles.sectionTitleBlock}>
-                <Text style={styles.sectionTitle}>Cuenta</Text>
-                <Text style={styles.sectionSubtitle}>Información básica de tu usuario actual.</Text>
+                <Text style={styles.sectionTitle}>Sesión</Text>
+                <Text style={styles.sectionSubtitle}>Correo y estado de tu acceso actual.</Text>
               </View>
             </View>
 
@@ -163,7 +160,7 @@ const styles = StyleSheet.create({
   contentStack: {
     marginTop: -18,
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingBottom: 0,
     gap: 14,
   },
   profileCard: {

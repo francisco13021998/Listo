@@ -1,6 +1,7 @@
 import { Stack, Tabs, usePathname, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { TAB_ROUTES } from '../../src/navigation/tabRoutes';
 import { tokens } from '../../src/theme/tokens';
@@ -9,6 +10,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 export default function TabsLayout() {
   const router = useRouter();
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
   const { activeHouseholdId, isHydrated } = useActiveHousehold();
   const allowedWithoutHousehold = pathname === '/(tabs)/household' || pathname === '/(tabs)/settings';
 
@@ -31,17 +33,22 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      initialRouteName="list"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: tokens.colors.primaryDark,
         tabBarInactiveTintColor: '#7C8798',
         tabBarStyle: {
-          height: 64,
-          paddingTop: 8,
-          paddingBottom: 8,
+          height: 56 + insets.bottom,
+          paddingTop: 2,
+          paddingBottom: insets.bottom,
           borderTopWidth: 1,
           borderTopColor: '#E5E7EB',
           backgroundColor: '#FFFFFF',
+        },
+        tabBarItemStyle: {
+          paddingTop: 0,
+          paddingBottom: 0,
         },
         tabBarLabelStyle: {
           fontSize: 11,

@@ -79,6 +79,8 @@ create table if not exists public.price_entries (
   product_id uuid not null references public.products(id) on delete cascade,
   store_id uuid not null references public.stores(id) on delete cascade,
   price_cents int not null,
+  quantity numeric,
+  unit text,
   currency text default 'EUR',
   purchased_at timestamptz default now(),
   created_by uuid references auth.users(id) on delete set null

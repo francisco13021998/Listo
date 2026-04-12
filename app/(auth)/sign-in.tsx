@@ -20,7 +20,7 @@ export default function SignInScreen() {
 
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      router.replace('/(tabs)/household');
+      router.replace('/(gate)');
     } catch (err) {
       Alert.alert('Error al iniciar sesión', (err as Error).message);
     } finally {
@@ -32,7 +32,7 @@ export default function SignInScreen() {
     <AuthLayout
       eyebrow="Accede a tu cuenta"
       title="Compra mejor. Gasta menos."
-      subtitle="Entra en LISTO para gestionar listas, hogares y precios con una experiencia pensada para un supermercado moderno."
+      subtitle="Entra en LISTO para gestionar listas, hogares y precios con una experiencia pensada para una tienda moderna."
       cardTitle="Iniciar sesión"
       cardSubtitle="Retoma tu organización y sigue comprando con más control desde el primer toque."
       footer={

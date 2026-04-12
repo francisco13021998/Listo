@@ -14,12 +14,12 @@ export function useOnboardingState(userId: string | null) {
   useEffect(() => {
     let cancelled = false;
 
-    const load = async () => {
-      setIsHydrated(false);
+    setHasSeenOnboarding(false);
+    setIsHydrated(false);
 
+    const load = async () => {
       if (!userId) {
         if (!cancelled) {
-          setHasSeenOnboarding(false);
           setIsHydrated(true);
         }
         return;

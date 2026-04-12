@@ -36,7 +36,7 @@ export default function StoresScreen() {
       if (existsPrices) {
         Alert.alert(
           'No se puede borrar',
-          'Este supermercado tiene precios asociados. Borra los precios primero.',
+          'Esta tienda tiene precios asociados. Borra los precios primero.',
           [
             { text: 'Cancelar', style: 'cancel' },
             {
@@ -69,15 +69,15 @@ export default function StoresScreen() {
   }
 
   return (
-    <Screen scrollable>
+    <Screen scrollable includeBottomSafeArea={false}>
       <SwipeTabs style={styles.page}>
         <View style={styles.heroHeader}>
           <View style={styles.heroContent}>
             <Text style={styles.heroEyebrow}>LISTO</Text>
-            <Text style={styles.pageTitle}>Supermercados</Text>
+            <Text style={styles.pageTitle}>Tiendas</Text>
             <Text style={styles.pageSubtitle}>Gestiona las tiendas donde registras tus precios.</Text>
           </View>
-          {loading ? <Text style={styles.loadingText}>Actualizando supermercados…</Text> : null}
+          {loading ? <Text style={styles.loadingText}>Actualizando tiendas…</Text> : null}
           <View style={styles.heroOrbPrimary} />
           <View style={styles.heroOrbSecondary} />
         </View>
@@ -85,7 +85,7 @@ export default function StoresScreen() {
         <View style={styles.contentStack}>
           <View style={styles.inputCard}>
             <View style={styles.inputCardHeader}>
-              <Text style={styles.inputCardTitle}>Tus supermercados</Text>
+              <Text style={styles.inputCardTitle}>Tus tiendas</Text>
               <Text style={styles.inputCardSubtitle}>Edita o crea nuevas tiendas para tu hogar.</Text>
             </View>
             <Pressable
@@ -93,7 +93,7 @@ export default function StoresScreen() {
               onPress={() => router.push('/modals/store-editor')}
               style={({ pressed }) => [styles.primaryCta, pressed && styles.primaryCtaPressed]}
             >
-              <Text style={styles.primaryCtaText}>+ Añadir supermercado</Text>
+              <Text style={styles.primaryCtaText}>+ Añadir tienda</Text>
             </Pressable>
           </View>
 
@@ -105,7 +105,7 @@ export default function StoresScreen() {
                 </View>
                 <View>
                   <Text style={styles.sectionTitle}>Lista de tiendas</Text>
-                  <Text style={styles.sectionHint}>{sortedStores.length} supermercados disponibles</Text>
+                  <Text style={styles.sectionHint}>{sortedStores.length} tiendas disponibles</Text>
                 </View>
               </View>
             </View>
@@ -120,8 +120,8 @@ export default function StoresScreen() {
             {sortedStores.length === 0 && !loading ? (
               <View style={styles.emptyWrap}>
                 <EmptyState
-                  title="No hay supermercados todavía"
-                  subtitle="Crea tu primer supermercado para empezar a registrar precios."
+                  title="No hay tiendas todavía"
+                  subtitle="Crea tu primera tienda para empezar a registrar precios."
                 />
               </View>
             ) : (
@@ -130,7 +130,7 @@ export default function StoresScreen() {
                   <Pressable
                     key={item.id}
                     accessibilityRole="button"
-                    onPress={() => router.push({ pathname: '/modals/store-editor', params: { storeId: item.id } })}
+                    onPress={() => router.push({ pathname: '/modals/store-prices', params: { storeId: item.id } })}
                     onLongPress={() => handleDelete(item.id)}
                     style={({ pressed }) => [styles.storeRow, pressed && styles.storeRowPressed]}
                   >
@@ -139,7 +139,9 @@ export default function StoresScreen() {
                     </View>
 
                     <Text style={styles.storeName}>{item.name}</Text>
-                    <Text style={styles.chevron}>›</Text>
+                    <View style={styles.chevronWrap}>
+                      <Ionicons name="chevron-forward" size={16} color="#475467" />
+                    </View>
                   </Pressable>
                 ))}
               </View>
@@ -219,7 +221,7 @@ const styles = StyleSheet.create({
   contentStack: {
     marginTop: -18,
     paddingHorizontal: 20,
-    paddingBottom: 36,
+    paddingBottom: 0,
     gap: 14,
   },
   inputCard: {
@@ -328,6 +330,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+    paddingLeft: 14,
+    paddingRight: 10,
   },
   storeBadge: {
     width: 44,
@@ -348,11 +352,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1F2937',
   },
-  chevron: {
-    color: '#9CA3AF',
-    fontSize: 24,
-    lineHeight: 24,
-    marginTop: -2,
+  chevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: '#EEF2F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   primaryCta: {
     minHeight: 50,

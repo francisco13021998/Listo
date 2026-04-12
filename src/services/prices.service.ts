@@ -1,4 +1,5 @@
 import { PriceEntry, PriceInsight } from '../domain/prices';
+import { ProductUnit } from '../domain/product';
 import { supabase } from '../lib/supabase';
 
 type AddPriceParams = {
@@ -6,21 +7,67 @@ type AddPriceParams = {
   productId: string;
   storeId: string;
   priceCents: number;
+  quantity?: number | null;
+  unit?: ProductUnit | null;
   currency?: string;
   purchasedAt?: string;
 };
 
 export async function addPrice(params: AddPriceParams): Promise<void> {
-  const { householdId, productId, storeId, priceCents, currency, purchasedAt } = params;
+  const { householdId, productId, storeId, priceCents, quantity, unit, currency, purchasedAt } = params;
 
   const { error } = await supabase.from('price_entries').insert({
     household_id: householdId,
     product_id: productId,
     store_id: storeId,
     price_cents: priceCents,
+    quantity: quantity ?? null,
+    unit: unit ?? null,
     currency: currency ?? null,
     purchased_at: purchasedAt ?? new Date().toISOString(),
   });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function getPriceEntryById(params: {
+  householdId: string;
+  priceEntryId: string;
+}): Promise<PriceEntry | null> {
+  const { householdId, priceEntryId } = params;
+  const { data, error } = await supabase
+    .from('price_entries')
+    .select('*')
+    .eq('household_id', householdId)
+    .eq('id', priceEntryId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return (data as PriceEntry | null) ?? null;
+}
+
+export async function updatePriceEntry(params: {
+  householdId: string;
+  priceEntryId: string;
+  storeId: string;
+  priceCents: number;
+  quantity?: number | null;
+  unit?: ProductUnit | null;
+  currency?: string;
+}): Promise<void> {
+  const { householdId, priceEntryId, storeId, priceCents, quantity, unit, currency } = params;
+
+  const { error } = await supabase
+    .from('price_entries')
+    .update({
+      store_id: storeId,
+      price_cents: priceCents,
+      quantity: quantity ?? null,
+      unit: unit ?? null,
+      currency: currency ?? null,
+    })
+    .eq('household_id', householdId)
+    .eq('id', priceEntryId);
 
   if (error) throw new Error(error.message);
 }

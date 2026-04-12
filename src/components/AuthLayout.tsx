@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { tokens } from '../theme/tokens';
 
 interface AuthLayoutProps {
@@ -14,40 +15,64 @@ interface AuthLayoutProps {
 }
 
 export function AuthLayout({ eyebrow, title, subtitle, cardTitle, cardSubtitle, footer, children }: AuthLayoutProps) {
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const keyboardGap = keyboardVisible ? 64 : 0;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
       <StatusBar barStyle="light-content" />
       <View style={styles.backgroundTop} />
       <View style={styles.backgroundGlowLarge} />
       <View style={styles.backgroundGlowSmall} />
 
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
       >
-        <View style={styles.hero}>
-          <View style={styles.brandPill}>
-            <Ionicons name="cart-outline" size={14} color={tokens.colors.surface} />
-            <Text style={styles.brandText}>LISTO</Text>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: styles.scrollContent.paddingBottom + keyboardGap }]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.hero}>
+            <View style={styles.brandPill}>
+              <Ionicons name="cart-outline" size={14} color={tokens.colors.surface} />
+              <Text style={styles.brandText}>LISTO</Text>
+            </View>
+
+            <Text style={styles.eyebrow}>{eyebrow}</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
 
-          <Text style={styles.eyebrow}>{eyebrow}</Text>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
-        </View>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>{cardTitle}</Text>
+              <Text style={styles.cardSubtitle}>{cardSubtitle}</Text>
+            </View>
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{cardTitle}</Text>
-            <Text style={styles.cardSubtitle}>{cardSubtitle}</Text>
+            <View style={styles.form}>{children}</View>
           </View>
 
-          <View style={styles.form}>{children}</View>
-        </View>
-
-        {footer ? <View style={styles.footer}>{footer}</View> : null}
-      </ScrollView>
+          {footer ? <View style={styles.footer}>{footer}</View> : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -56,6 +81,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#EAF7EE',
+  },
+  flex: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
