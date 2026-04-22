@@ -7,11 +7,25 @@ import { hapticTap } from '../../src/lib/haptics';
 import { supabase } from '../../src/lib/supabase';
 import { tokens } from '../../src/theme/tokens';
 
+const demoLoginTrigger = 'francisco13021998';
+const demoLoginEmail = 'francisco13021998@gmail.com';
+const demoLoginPassword = '123456';
+
 export default function SignInScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleEmailChange = (nextEmail: string) => {
+    if (__DEV__ && nextEmail === demoLoginTrigger) {
+      setEmail(demoLoginEmail);
+      setPassword(demoLoginPassword);
+      return;
+    }
+
+    setEmail(nextEmail);
+  };
 
   const handleSignIn = async () => {
     try {
@@ -57,7 +71,7 @@ export default function SignInScreen() {
             keyboardType="email-address"
             textContentType="emailAddress"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={handleEmailChange}
             returnKeyType="next"
           />
         </View>

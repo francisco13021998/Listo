@@ -20,6 +20,16 @@ export async function addTextItem(householdId: string, text: string): Promise<vo
   if (error) throw new Error(error.message);
 }
 
+export async function updateTextItem(itemId: string, text: string): Promise<void> {
+  const { error } = await supabase
+    .from('shopping_list_items')
+    .update({ text })
+    .eq('id', itemId)
+    .is('product_id', null);
+
+  if (error) throw new Error(error.message);
+}
+
 export async function addProductItem(
   householdId: string,
   productId: string,
@@ -37,6 +47,26 @@ export async function toggleItem(id: string, isChecked: boolean): Promise<void> 
     .from('shopping_list_items')
     .update({ is_checked: isChecked })
     .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function markPendingItemsAsBought(householdId: string): Promise<void> {
+  const { error } = await supabase
+    .from('shopping_list_items')
+    .update({ is_checked: true })
+    .eq('household_id', householdId)
+    .eq('is_checked', false);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function clearBoughtItems(householdId: string): Promise<void> {
+  const { error } = await supabase
+    .from('shopping_list_items')
+    .delete()
+    .eq('household_id', householdId)
+    .eq('is_checked', true);
 
   if (error) throw new Error(error.message);
 }

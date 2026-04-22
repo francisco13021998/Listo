@@ -11,19 +11,51 @@ export default function SignUpScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const isUsernameConflictError = (message: string) => {
+    const normalizedMessage = message.toLowerCase();
+    return (
+      normalizedMessage.includes('duplicate key') ||
+      normalizedMessage.includes('idx_profiles_username') ||
+      normalizedMessage.includes('profiles_username')
+    );
+  };
 
   const handleSignUp = async () => {
     try {
       void hapticTap();
       setLoading(true);
-      const { error, data } = await supabase.auth.signUp({ email, password });
+      const trimmedUsername = username.trim().toLowerCase();
+
+      if (!trimmedUsername) {
+        Alert.alert('Nombre de usuario requerido', 'Escribe un nombre de usuario para continuar.');
+        return;
+      }
+
+      const usernamePattern = /^[a-z0-9._-]{3,24}$/;
+      if (!usernamePattern.test(trimmedUsername)) {
+        Alert.alert(
+          'Nombre de usuario no válido',
+          'Usa entre 3 y 24 caracteres: letras minúsculas, números, punto, guion o guion bajo.'
+        );
+        return;
+      }
+
+      const { error, data } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { username: trimmedUsername, display_name: trimmedUsername },
+        },
+      });
       if (error) throw error;
 
-      // Optional profile update if session available
-      if (displayName && data.session?.user) {
-        await supabase.from('profiles').update({ display_name: displayName }).eq('id', data.session.user.id);
+      if (data.session?.user) {
+        await supabase
+          .from('profiles')
+          .upsert({ id: data.session.user.id, username: trimmedUsername, display_name: trimmedUsername });
       }
 
       if (data.session) {
@@ -38,7 +70,13 @@ export default function SignUpScreen() {
         },
       ]);
     } catch (err) {
-      Alert.alert('Error al registrar', (err as Error).message);
+      const message = (err as Error).message;
+      if (isUsernameConflictError(message)) {
+        Alert.alert('Nombre de usuario en uso', 'Ese nombre de usuario ya existe. Elige otro para continuar.');
+        return;
+      }
+
+      Alert.alert('Error al registrar', message);
     } finally {
       setLoading(false);
     }
@@ -61,17 +99,19 @@ export default function SignUpScreen() {
       }
     >
       <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Nombre para mostrar</Text>
+        <Text style={styles.fieldLabel}>Nombre de usuario</Text>
         <View style={styles.inputShell}>
           <Ionicons name="person-outline" size={18} color={tokens.colors.textMuted} />
           <TextInput
             style={styles.input}
-            placeholder="Tu nombre"
+            placeholder="Tu usuario"
             placeholderTextColor="#94A3B8"
-            autoComplete="name"
-            textContentType="name"
-            value={displayName}
-            onChangeText={setDisplayName}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="username"
+            textContentType="username"
+            value={username}
+            onChangeText={setUsername}
             returnKeyType="next"
           />
         </View>

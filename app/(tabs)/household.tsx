@@ -13,6 +13,7 @@ import { HouseholdSelectionCard } from '../../src/components/household/Household
 import { LeaveHouseholdDialog } from '../../src/components/household/LeaveHouseholdDialog';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useHouseholds } from '../../src/hooks/useHouseholds';
+import { useShoppingList } from '../../src/hooks/useShoppingList';
 import { useSession } from '../../src/hooks/useSession';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
 import { tokens } from '../../src/theme/tokens';
@@ -23,6 +24,13 @@ type LeaveDialogState = {
   open: boolean;
   target: { id: string; name: string } | null;
   isDeletingLastMember: boolean;
+};
+
+type HouseholdMember = {
+  user_id: string;
+  username: string;
+  role: string;
+  created_at: string;
 };
 
 function formatRemainingTime(totalSeconds: number) {
@@ -44,6 +52,7 @@ export default function HouseholdScreen() {
     createInvitation,
     joinHouseholdByCode,
     leaveHousehold,
+    getHouseholdMembers,
     getHouseholdMemberCount,
     refresh,
   } = useHouseholds();
@@ -65,6 +74,9 @@ export default function HouseholdScreen() {
   const [leaveConfirmValue, setLeaveConfirmValue] = useState('');
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState<string | null>(null);
 
   const activeHousehold = useMemo(
     () => households.find((household) => household.id === activeHouseholdId) ?? null,
@@ -96,6 +108,42 @@ export default function HouseholdScreen() {
     const timer = setInterval(updateRemaining, 1000);
     return () => clearInterval(timer);
   }, [inviteExpiresAt]);
+
+  useEffect(() => {
+    if (!activeHouseholdId) {
+      setHouseholdMembers([]);
+      setMembersError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMembers = async () => {
+      setMembersLoading(true);
+      setMembersError(null);
+
+      try {
+        const members = await getHouseholdMembers(activeHouseholdId);
+        if (!cancelled) {
+          setHouseholdMembers(members);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMembersError((err as Error).message);
+        }
+      } finally {
+        if (!cancelled) {
+          setMembersLoading(false);
+        }
+      }
+    };
+
+    void loadMembers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeHouseholdId, getHouseholdMembers]);
 
   useEffect(() => {
     if (!sessionLoading && !user) {
@@ -355,6 +403,40 @@ export default function HouseholdScreen() {
                   </View>
                 </View>
               </View>
+
+              <SectionCard title="Miembros del hogar" subtitle="Las personas que forman parte de este hogar.">
+                {membersError ? <Text style={styles.errorText}>{membersError}</Text> : null}
+                {membersLoading ? <Text style={styles.helperText}>Cargando miembros…</Text> : null}
+
+                {!membersLoading ? (
+                  <View style={styles.membersList}>
+                    {householdMembers.map((member) => {
+                      const initials = member.username.trim().slice(0, 2).toUpperCase() || 'M';
+                      const isOwner = activeHousehold?.createdBy === member.user_id;
+
+                      return (
+                        <View key={member.user_id} style={styles.memberRow}>
+                          <View style={styles.memberAvatar}>
+                            <Text style={styles.memberAvatarText}>{initials}</Text>
+                          </View>
+                          <View style={styles.memberTextBlock}>
+                            <View style={styles.memberNameRow}>
+                              <Text style={styles.memberName}>{member.username || 'Miembro'}</Text>
+                              {isOwner ? <Text style={styles.memberRoleBadge}>Propietario</Text> : null}
+                            </View>
+                            <Text style={styles.memberMeta}>{isOwner ? 'Gestiona este hogar' : 'Miembro del hogar'}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                {!membersLoading && householdMembers.length === 0 ? (
+                  <Text style={styles.helperText}>Todavía no hay miembros visibles para este hogar.</Text>
+                ) : null}
+              </SectionCard>
+
             </>
           ) : (
             <>
@@ -427,6 +509,7 @@ export default function HouseholdScreen() {
         onConfirm={() => void confirmLeave()}
         onClose={closeLeaveDialog}
       />
+
     </Screen>
   );
 }
@@ -644,6 +727,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '500',
   },
+  renameButton: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CFE4D5',
+    backgroundColor: '#F7FBF8',
+  },
+  renameButtonPressed: {
+    opacity: 0.95,
+    transform: [{ scale: 0.99 }],
+  },
+  renameButtonText: {
+    color: tokens.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   helpIntro: {
     color: '#344054',
     fontSize: 14,
@@ -722,6 +826,97 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '600',
+  },
+  membersList: {
+    gap: 10,
+  },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  memberAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF7F0',
+  },
+  memberAvatarText: {
+    color: tokens.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  memberTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  memberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  memberName: {
+    color: '#111827',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  memberRoleBadge: {
+    color: '#176B3A',
+    fontSize: 11,
+    fontWeight: '800',
+    backgroundColor: '#EEF7F0',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    overflow: 'hidden',
+  },
+  memberMeta: {
+    color: '#667085',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  renameBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  renameModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    gap: 12,
+  },
+  renameModalTitle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  renameModalSubtitle: {
+    color: '#667085',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  renameInput: {
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D3E2D6',
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+    color: '#111827',
+    fontSize: 15,
+  },
+  renameActions: {
+    flexDirection: 'column',
+    gap: 10,
   },
   primaryAction: {
     minHeight: 48,

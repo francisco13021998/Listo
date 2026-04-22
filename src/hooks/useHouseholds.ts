@@ -3,11 +3,13 @@ import { Household } from '../domain/household';
 import {
   createHousehold,
   createHouseholdInvitation,
+  getHouseholdMembers,
   getHouseholdMemberCount,
   getMyHouseholds,
   leaveHouseholdOrDelete,
   joinHousehold,
   joinHouseholdByCode,
+  renameHousehold,
 } from '../services/household.service';
 import { useSession } from './useSession';
 
@@ -81,6 +83,18 @@ export function useHouseholds() {
     [refresh]
   );
 
+  const rename = useCallback(
+    async (householdId: string, name: string) => {
+      await renameHousehold(householdId, name);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const members = useCallback(async (householdId: string) => {
+    return getHouseholdMembers(householdId);
+  }, []);
+
   const getMemberCount = useCallback(async (householdId: string) => {
     return getHouseholdMemberCount(householdId);
   }, []);
@@ -100,6 +114,8 @@ export function useHouseholds() {
     createInvitation,
     joinHouseholdByCode: joinByCode,
     leaveHousehold: leave,
+    renameHousehold: rename,
+    getHouseholdMembers: members,
     getHouseholdMemberCount: getMemberCount,
   } as const;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
@@ -12,6 +12,7 @@ import { usePrices } from '../../src/hooks/usePrices';
 import { useStores } from '../../src/hooks/useStores';
 import { getPriceEntryById, updatePriceEntry } from '../../src/services/prices.service';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
+import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
 
 type StoreOption = {
@@ -221,8 +222,8 @@ export default function PriceEditorModal() {
 
   const closeDropdown = () => setDropdownOpen(false);
 
-  const windowHeight = Dimensions.get('window').height;
-  const dropdownTop = Math.min(dropdownAnchor.y + dropdownAnchor.height + 6, windowHeight - 280);
+  const dropdownHeight = Math.min(320, sortedStores.length * 44 + 84);
+  const dropdownStyle = getFloatingMenuStyle(dropdownAnchor, { menuWidth: dropdownAnchor.width, menuHeight: dropdownHeight });
 
   const hasMissingContext = !productId || !activeHouseholdId;
 
@@ -412,8 +413,8 @@ export default function PriceEditorModal() {
                       style={[
                         styles.dropdownMenu,
                         {
-                          top: dropdownTop,
-                          left: dropdownAnchor.x,
+                            top: dropdownStyle.top,
+                            left: dropdownStyle.left,
                           width: dropdownAnchor.width,
                         },
                       ]}

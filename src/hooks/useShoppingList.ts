@@ -3,6 +3,7 @@ import { ShoppingListItem } from '../domain/shoppingList';
 import {
   addProductItem,
   addTextItem,
+  clearBoughtItems,
   deleteItem,
   listItems,
   toggleItem,
@@ -68,6 +69,15 @@ export function useShoppingList(householdId: string | null) {
     [refresh]
   );
 
+  const clearBought = useCallback(
+    async () => {
+      if (!householdId) throw new Error('No hay hogar activo');
+      await clearBoughtItems(householdId);
+      await refresh();
+    },
+    [householdId, refresh]
+  );
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -83,6 +93,7 @@ export function useShoppingList(householdId: string | null) {
         Promise.reject(new Error('No hay hogar activo')),
       toggleItem: (_id: string, _isChecked: boolean) => Promise.reject(new Error('No hay hogar activo')),
       deleteItem: (_id: string) => Promise.reject(new Error('No hay hogar activo')),
+      clearBoughtItems: () => Promise.reject(new Error('No hay hogar activo')),
     } as const;
   }
 
@@ -95,5 +106,6 @@ export function useShoppingList(householdId: string | null) {
     addProductItem: addProduct,
     toggleItem: toggle,
     deleteItem: remove,
+    clearBoughtItems: clearBought,
   } as const;
 }

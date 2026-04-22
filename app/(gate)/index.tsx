@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { EmptyState } from '../../src/components/EmptyState';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
+import { useHouseholds } from '../../src/hooks/useHouseholds';
 import { useSession } from '../../src/hooks/useSession';
 import { hasSupabaseConfig, missingSupabaseConfigMessage } from '../../src/lib/env';
 import { useOnboardingState } from '../../src/state/onboarding.store';
@@ -10,7 +11,11 @@ import { tokens } from '../../src/theme/tokens';
 export default function GateScreen() {
   const { session, loading } = useSession();
   const { activeHouseholdId, isHydrated: isHouseholdHydrated } = useActiveHousehold();
+  const { households, loading: householdsLoading } = useHouseholds();
   const { hasSeenOnboarding, isHydrated: isOnboardingHydrated } = useOnboardingState(session?.user?.id ?? null);
+  const activeHouseholdExists = activeHouseholdId
+    ? households.some((household) => household.id === activeHouseholdId)
+    : false;
 
   if (!hasSupabaseConfig) {
     return (
@@ -24,7 +29,7 @@ export default function GateScreen() {
     );
   }
 
-  if (loading || !isHouseholdHydrated || !isOnboardingHydrated) {
+  if (loading || householdsLoading || !isHouseholdHydrated || !isOnboardingHydrated) {
     return (
       <View style={styles.loadingScreen}>
         <ActivityIndicator size="small" color={tokens.colors.primaryDark} />
@@ -41,7 +46,7 @@ export default function GateScreen() {
     return <Redirect href="/(onboarding)" />;
   }
 
-  return <Redirect href={activeHouseholdId ? '/(tabs)/list' : '/(tabs)/household'} />;
+  return <Redirect href={activeHouseholdExists ? '/(tabs)/list' : '/(tabs)/household'} />;
 }
 
 const styles = StyleSheet.create({

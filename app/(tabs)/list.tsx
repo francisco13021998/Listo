@@ -20,6 +20,7 @@ import { SwipeTabs } from '../../src/components/SwipeTabs';
 import { AddItemBlock } from '../../src/components/list/AddItemBlock';
 import { BoughtSection } from '../../src/components/list/BoughtSection';
 import { PendingSection } from '../../src/components/list/PendingSection';
+import { ShoppingModeControl } from '../../src/components/list/ShoppingModeControl';
 import { ShoppingListItem } from '../../src/domain/shoppingList';
 import { PriceEntry, PriceInsight } from '../../src/domain/prices';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
@@ -119,8 +120,17 @@ export default function ListScreen() {
   const { products, refresh: refreshProducts } = useProducts(activeHouseholdId);
   const { stores, refresh: refreshStores } = useStores(activeHouseholdId);
   const { latestByProductId, insightsByProductId, refresh: refreshPrices } = usePrices(activeHouseholdId);
-  const { items, loading, error, addTextItem, addProductItem, toggleItem, deleteItem, refresh: refreshShopping } =
-    useShoppingList(activeHouseholdId);
+  const {
+    items,
+    loading,
+    error,
+    addTextItem,
+    addProductItem,
+    toggleItem,
+    deleteItem,
+    clearBoughtItems,
+    refresh: refreshShopping,
+  } = useShoppingList(activeHouseholdId);
 
   const priceLatestMap = latestByProductId as Record<string, PriceEntry>;
   const priceInsightsMap = insightsByProductId as Record<string, PriceInsight>;
@@ -136,6 +146,9 @@ export default function ListScreen() {
   const [shouldRenderDropdown, setShouldRenderDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null);
+  const [openMenuAnchor, setOpenMenuAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [isShoppingModeActive, setIsShoppingModeActive] = useState(false);
+  const [selectedShoppingStoreId, setSelectedShoppingStoreId] = useState<string | null>(null);
 
   useEffect(() => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -159,6 +172,17 @@ export default function ListScreen() {
     });
     return map;
   }, [stores]);
+
+  const sortedStores = useMemo(
+    () => [...stores].sort((left, right) => left.name.localeCompare(right.name)),
+    [stores]
+  );
+
+  useEffect(() => {
+    if (selectedShoppingStoreId && !sortedStores.some((store) => store.id === selectedShoppingStoreId)) {
+      setSelectedShoppingStoreId(null);
+    }
+  }, [selectedShoppingStoreId, sortedStores]);
 
   const productInfoById = useMemo(() => {
     const map: Record<string, { quantity: number | null; unit: string | null }> = {};
@@ -241,6 +265,26 @@ export default function ListScreen() {
 
   const pendingItems = useMemo(() => sortedShoppingItems.filter((item) => !item.is_checked), [sortedShoppingItems]);
   const completedItems = useMemo(() => sortedShoppingItems.filter((item) => item.is_checked), [sortedShoppingItems]);
+
+  const hasTextDuplicate = (value: string) => {
+    return items.some((item) => !item.product_id && item.text.trim() === value.trim());
+  };
+
+  const hasProductDuplicate = (productId: string) => {
+    return items.some((item) => item.product_id === productId);
+  };
+
+  const confirmDuplicateAddition = (message: string) => {
+    return new Promise<boolean>((resolve) => {
+      Alert.alert('Producto ya añadido', message, [
+        { text: 'Cancelar', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Añadir igualmente', onPress: () => resolve(true) },
+      ], {
+        cancelable: true,
+        onDismiss: () => resolve(false),
+      });
+    });
+  };
 
   const pendingGroups = useMemo<PendingGroup[]>(() => {
     const groups = new Map<string, PendingGroup>();
@@ -465,6 +509,14 @@ export default function ListScreen() {
 
     setIsSubmitting(true);
     try {
+      if (hasTextDuplicate(value)) {
+        const shouldAddDuplicate = await confirmDuplicateAddition(`Ya has añadido "${value}" a la lista. ¿Quieres añadirlo igualmente?`);
+        if (!shouldAddDuplicate) {
+          selectingSuggestionRef.current = false;
+          return;
+        }
+      }
+
       runListLayoutAnimation();
       await addTextItem(value);
       void hapticSuccess();
@@ -483,6 +535,14 @@ export default function ListScreen() {
 
     setIsSubmitting(true);
     try {
+      if (hasProductDuplicate(productId)) {
+        const shouldAddDuplicate = await confirmDuplicateAddition(`Ya has añadido "${name}" a la lista. ¿Quieres añadirlo igualmente?`);
+        if (!shouldAddDuplicate) {
+          selectingSuggestionRef.current = false;
+          return;
+        }
+      }
+
       runListLayoutAnimation();
       await addProductItem(productId, name);
       void hapticSuccess();
@@ -496,40 +556,27 @@ export default function ListScreen() {
     }
   };
 
-  const handleToggle = async (item: ShoppingListItem) => {
+  const handleEditItem = (item: ShoppingListItem) => {
     setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
 
-    if (!item.is_checked && !item.product_id) {
-      Alert.alert('Este producto aún no está registrado', 'Puedes registrarlo o marcarlo como comprado igualmente.', [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Registrar producto',
-          onPress: () => {
-            router.push({
-              pathname: '/modals/product-editor',
-              params: {
-                name: item.text,
-                sourceShoppingItemId: item.id,
-              },
-            });
-          },
-        },
-        {
-          text: 'Marcar como comprado',
-          onPress: async () => {
-            try {
-              runListLayoutAnimation();
-              await toggleItem(item.id, true);
-              void hapticTap();
-            } catch (err) {
-              void hapticError();
-              Alert.alert('Error al actualizar', (err as Error).message);
-            }
-          },
-        },
-      ]);
+    if (item.product_id) {
+      router.push({ pathname: '/modals/product-editor', params: { productId: item.product_id } });
       return;
     }
+
+    router.push({
+      pathname: '/modals/list-item-editor',
+      params: {
+        itemId: item.id,
+        currentText: item.text,
+      },
+    });
+  };
+
+  const handleToggle = async (item: ShoppingListItem) => {
+    setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
 
     try {
       runListLayoutAnimation();
@@ -541,8 +588,34 @@ export default function ListScreen() {
     }
   };
 
+  const handleClearBoughtItems = () => {
+    if (!activeHouseholdId || completedItems.length === 0) {
+      return;
+    }
+
+    Alert.alert('Vaciar comprados', 'Se eliminarán todos los elementos de la lista de comprados.', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Vaciar',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            runListLayoutAnimation();
+            await clearBoughtItems();
+            void hapticMedium();
+            await refreshShopping();
+          } catch (err) {
+            void hapticError();
+            Alert.alert('Error al borrar', (err as Error).message);
+          }
+        },
+      },
+    ]);
+  };
+
   const handleDelete = (item: ShoppingListItem) => {
     setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
     Alert.alert('Eliminar de la lista', `Se quitará "${item.text}" de la lista.`, [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -564,24 +637,35 @@ export default function ListScreen() {
 
   const handleViewProduct = (item: ShoppingListItem) => {
     setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
     if (!item.product_id) return;
     router.push({ pathname: '/modals/product-prices', params: { productId: item.product_id } });
   };
 
   const handleManagePrice = (item: ShoppingListItem) => {
     setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
     if (!item.product_id) return;
-    router.push({ pathname: '/modals/price-editor', params: { productId: item.product_id, returnTo: '/(tabs)/list' } });
+    router.push({
+      pathname: '/modals/price-editor',
+      params: {
+        productId: item.product_id,
+        returnTo: '/(tabs)/list',
+        selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
+      },
+    });
   };
 
   const handleRegisterProduct = (item: ShoppingListItem) => {
     setOpenMenuItemId(null);
+    setOpenMenuAnchor(null);
     router.push({
       pathname: '/modals/product-editor',
       params: {
         name: item.text,
         sourceShoppingItemId: item.id,
         markAsBought: 'false',
+        selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
       },
     });
   };
@@ -619,6 +703,16 @@ export default function ListScreen() {
             </View>
             <View style={styles.heroOrbPrimary} />
             <View style={styles.heroOrbSecondary} />
+          </View>
+
+          <View style={styles.shoppingModeSection}>
+            <ShoppingModeControl
+              stores={sortedStores}
+              enabled={isShoppingModeActive}
+              selectedStoreId={selectedShoppingStoreId}
+              onToggleEnabled={() => setIsShoppingModeActive((current) => !current)}
+              onSelectStore={setSelectedShoppingStoreId}
+            />
           </View>
 
           <View style={styles.contentStack}>
@@ -662,10 +756,19 @@ export default function ListScreen() {
               empty={pendingItems.length === 0}
               loading={loading}
               menuOpenItemId={openMenuItemId}
+              menuAnchor={openMenuAnchor}
               animationsByItemId={rowAnimationsRef.current}
               getPriceSummary={getPriceSummary}
               onToggle={(item) => void handleToggle(item)}
-              onToggleMenu={(itemId) => setOpenMenuItemId((current) => (current === itemId ? null : itemId))}
+              onToggleMenu={(itemId, anchor) => {
+                setOpenMenuItemId((current) => (current === itemId ? null : itemId));
+                setOpenMenuAnchor(anchor);
+              }}
+              onCloseMenu={() => {
+                setOpenMenuItemId(null);
+                setOpenMenuAnchor(null);
+              }}
+              onEdit={handleEditItem}
               onViewProduct={handleViewProduct}
               onManagePrice={handleManagePrice}
               onRegisterProduct={handleRegisterProduct}
@@ -677,6 +780,12 @@ export default function ListScreen() {
               empty={completedItems.length === 0}
               animationsByItemId={rowAnimationsRef.current}
               onToggle={(item) => void handleToggle(item)}
+              onEdit={handleEditItem}
+              onViewProduct={handleViewProduct}
+              onManagePrice={handleManagePrice}
+              onRegisterProduct={handleRegisterProduct}
+              onDelete={handleDelete}
+              onClearAll={handleClearBoughtItems}
             />
           </View>
         </SwipeTabs>
@@ -747,10 +856,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   contentStack: {
-    marginTop: -12,
+    marginTop: -8,
     paddingHorizontal: 20,
     paddingBottom: 0,
-    gap: 14,
+    gap: 10,
+  },
+  shoppingModeSection: {
+    position: 'relative',
+    zIndex: 30,
+    elevation: 8,
+    paddingHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 12,
   },
   errorCard: {
     flexDirection: 'row',

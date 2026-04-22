@@ -25,9 +25,30 @@ $$;
 -- profiles: one-to-one with auth.users
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
+  username text,
   display_name text,
   created_at timestamptz default now()
 );
+
+alter table if exists public.profiles
+  add column if not exists username text;
+
+create unique index if not exists idx_profiles_username on public.profiles (username) where username is not null;
+
+update public.profiles p
+set username = nullif(
+  trim(
+    coalesce(
+      p.username,
+      p.display_name,
+      split_part(au.email, '@', 1)
+    )
+  ),
+  ''
+)
+from auth.users au
+where au.id = p.id
+  and (p.username is null or trim(p.username) = '');
 
 -- households
 create table if not exists public.households (
@@ -112,10 +133,53 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  has_username boolean;
+  has_display_name boolean;
+  has_created_at boolean;
+  columns text[] := array['id'];
+  values_sql text := quote_literal(new.id::text);
+  insert_sql text;
+  username_value text := nullif(trim(new.raw_user_meta_data->>'username'), '');
+  display_name_value text := nullif(trim(coalesce(new.raw_user_meta_data->>'display_name', new.raw_user_meta_data->>'username')), '');
 begin
-  insert into public.profiles (id, display_name)
-  values (new.id, null)
-  on conflict (id) do nothing;
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'username'
+  ) into has_username;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'display_name'
+  ) into has_display_name;
+
+  select exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'created_at'
+  ) into has_created_at;
+
+  if has_username then
+    columns := array_append(columns, 'username');
+    values_sql := values_sql || ', ' || quote_nullable(username_value);
+  end if;
+
+  if has_display_name then
+    columns := array_append(columns, 'display_name');
+    values_sql := values_sql || ', ' || quote_nullable(display_name_value);
+  end if;
+
+  if has_created_at then
+    columns := array_append(columns, 'created_at');
+    values_sql := values_sql || ', now()';
+  end if;
+
+  insert_sql := format(
+    'insert into public.profiles (%s) values (%s) on conflict (id) do nothing',
+    array_to_string(columns, ', '),
+    values_sql
+  );
+
+  execute insert_sql;
   return new;
 end;
 $$;
@@ -140,12 +204,26 @@ alter table public.shopping_list_items enable row level security;
 drop policy if exists profiles_self_select on public.profiles;
 create policy profiles_self_select on public.profiles
   for select using (auth.uid() = id);
+drop policy if exists profiles_household_member_select on public.profiles;
+create policy profiles_household_member_select on public.profiles
+  for select using (
+    exists (
+      select 1
+      from public.household_members me
+      join public.household_members them
+        on them.household_id = me.household_id
+      where me.user_id = auth.uid()
+        and them.user_id = profiles.id
+    )
+  );
 drop policy if exists profiles_self_update on public.profiles;
 create policy profiles_self_update on public.profiles
   for update using (auth.uid() = id);
 drop policy if exists profiles_self_insert on public.profiles;
 create policy profiles_self_insert on public.profiles
   for insert with check (auth.uid() = id);
+
+-- Optional: allow users to look up their own username data safely via auth-owned rows.
 
 -- households: select if member; insert authenticated; update/delete only owner
 drop policy if exists households_select_member on public.households;
@@ -421,6 +499,72 @@ begin
 
   return 'left';
 end;
+$$;
+
+-- RPC: get household members with profile names
+create or replace function public.get_household_members(p_household_id uuid)
+returns table(user_id uuid, display_name text, role text, created_at timestamptz)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    hm.user_id,
+    coalesce(nullif(trim(p.display_name), ''), 'Miembro') as display_name,
+    hm.role,
+    hm.created_at
+  from public.household_members hm
+  left join public.profiles p on p.id = hm.user_id
+  where hm.household_id = p_household_id
+  order by hm.created_at asc, hm.user_id asc;
+$$;
+
+-- RPC: rename household
+create or replace function public.rename_household(p_household_id uuid, p_name text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'auth.uid() is null';
+  end if;
+
+  update public.households
+  set name = trim(p_name)
+  where id = p_household_id
+    and created_by = v_uid;
+
+  if not found then
+    raise exception 'No se pudo cambiar el nombre del hogar';
+  end if;
+end;
+$$;
+
+-- RPC: get household members with the best available name
+create or replace function public.get_household_members(p_household_id uuid)
+returns table(user_id uuid, username text, role text, created_at timestamptz)
+language sql
+security definer
+set search_path = public, auth
+as $$
+  select
+    hm.user_id,
+    coalesce(
+      nullif(trim(p.username), ''),
+      nullif(split_part(au.email, '@', 1), ''),
+      'Miembro'
+    ) as username,
+    hm.role,
+    hm.created_at
+  from public.household_members hm
+  left join public.profiles p on p.id = hm.user_id
+  left join auth.users au on au.id = hm.user_id
+  where hm.household_id = p_household_id
+  order by hm.created_at asc, hm.user_id asc;
 $$;
 
 -- PASOS EN SUPABASE

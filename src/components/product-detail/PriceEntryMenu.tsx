@@ -1,6 +1,7 @@
-import { Dimensions, Pressable, Modal, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Modal, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { tokens } from '../../theme/tokens';
+import { getFloatingMenuStyle } from '../../lib/floatingMenu';
 
 type MenuAnchor = {
   x: number;
@@ -31,14 +32,12 @@ export function PriceEntryMenu({
   onClose,
 }: PriceEntryMenuProps) {
   const menuWidth = 228;
-  const screen = Dimensions.get('window');
-  const left = anchor ? Math.max(12, Math.min(anchor.x - menuWidth + 28, screen.width - menuWidth - 12)) : 12;
-  const top = anchor ? Math.max(12, Math.min(anchor.y + 12, screen.height - 220)) : 12;
+  const menuStyle = getFloatingMenuStyle(anchor ? { x: anchor.x, y: anchor.y } : null, { menuWidth, menuHeight: 96 });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable style={[styles.sheet, { left, top, width: menuWidth }]} onPress={() => undefined}>
+        <Pressable style={[styles.sheet, { left: menuStyle.left, top: menuStyle.top, width: menuWidth }]} onPress={() => undefined}>
           <MenuAction icon="create-outline" label="Editar precio" onPress={onEditPrice} disabled={loading} />
           <MenuAction icon="trash-outline" label="Eliminar precio" onPress={onDeletePrice} danger disabled={loading} />
         </Pressable>

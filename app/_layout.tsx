@@ -36,6 +36,10 @@ export default function RootLayout() {
             options={{ presentation: "modal", title: "Añadir producto", headerShown: false }}
           />
           <Stack.Screen
+            name="modals/list-item-editor"
+            options={{ presentation: "modal", title: "Editar elemento", headerShown: false }}
+          />
+          <Stack.Screen
             name="modals/store-prices"
             options={{ presentation: "modal", title: "Detalle de la tienda", headerShown: false }}
           />

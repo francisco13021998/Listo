@@ -51,8 +51,10 @@ export function AddItemBlock({
   return (
     <View style={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>Añadir producto</Text>
-        <Text style={styles.subtitle}>Busca o escribe.</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.title}>Añadir producto</Text>
+          <Text style={styles.subtitle}>Busca o escribe.</Text>
+        </View>
       </View>
 
       <View style={styles.inputShell}>
@@ -121,7 +123,7 @@ export function AddItemBlock({
             >
               <View style={styles.dropdownItemTopRow}>
                 <Text style={styles.dropdownItemTitle}>{product.name}</Text>
-                {(product.latestPrice !== null || product.comparisonLabel || product.latestStoreName) ? (
+                {product.latestPrice !== null || product.comparisonLabel || product.latestStoreName ? (
                   <Text style={styles.dropdownItemInlineMeta} numberOfLines={1}>
                     {[
                       product.latestPrice !== null ? formatPrice(product.latestPrice) : null,
@@ -144,55 +146,62 @@ export function AddItemBlock({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#E7EDE8',
     zIndex: 12,
   },
   header: {
-    gap: 4,
+    gap: 2,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
   title: {
     color: '#111827',
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: '800',
   },
   subtitle: {
     color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: '500',
+    textAlign: 'right',
   },
   inputShell: {
-    minHeight: 54,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#D3E2D6',
     backgroundColor: '#FFFFFF',
-    paddingLeft: 14,
+    paddingLeft: 12,
     paddingRight: 8,
   },
   input: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 44,
     color: '#111827',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
   },
   addButton: {
-    minHeight: 40,
-    borderRadius: 12,
+    minHeight: 36,
+    borderRadius: 11,
     backgroundColor: tokens.colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   addButtonPressed: {
     opacity: 0.92,
@@ -202,7 +211,7 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
   dropdown: {
@@ -250,11 +259,6 @@ const styles = StyleSheet.create({
     color: tokens.colors.primaryDark,
     fontSize: 14,
     fontWeight: '800',
-  },
-  dropdownPrimaryMeta: {
-    color: '#667085',
-    fontSize: 12,
-    lineHeight: 16,
   },
   dropdownItem: {
     paddingHorizontal: 16,

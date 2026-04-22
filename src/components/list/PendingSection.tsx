@@ -17,10 +17,13 @@ type PendingSectionProps = {
   empty: boolean;
   loading?: boolean;
   menuOpenItemId: string | null;
+  menuAnchor: { x: number; y: number } | null;
   animationsByItemId: Record<string, { checked: Animated.Value; mount: Animated.Value }>;
   getPriceSummary: (item: ShoppingListItem) => { priceLabel: string | null; unitPriceLabel: string | null };
   onToggle: (item: ShoppingListItem) => void;
-  onToggleMenu: (itemId: string) => void;
+  onToggleMenu: (itemId: string, anchor: { x: number; y: number }) => void;
+  onCloseMenu: () => void;
+  onEdit: (item: ShoppingListItem) => void;
   onViewProduct: (item: ShoppingListItem) => void;
   onManagePrice: (item: ShoppingListItem) => void;
   onRegisterProduct: (item: ShoppingListItem) => void;
@@ -33,15 +36,20 @@ export function PendingSection({
   empty,
   loading,
   menuOpenItemId,
+  menuAnchor,
   animationsByItemId,
   getPriceSummary,
   onToggle,
   onToggleMenu,
+  onCloseMenu,
+  onEdit,
   onViewProduct,
   onManagePrice,
   onRegisterProduct,
   onDelete,
 }: PendingSectionProps) {
+  const hasStoreGroups = groups.some((group) => !group.isUnpriced);
+
   return (
     <View style={styles.card}>
       <View style={styles.header}>
@@ -76,11 +84,14 @@ export function PendingSection({
                   priceLabel={summary.priceLabel}
                   unitPriceLabel={summary.unitPriceLabel}
                   menuOpen={menuOpenItemId === item.id}
+                  menuAnchor={menuOpenItemId === item.id ? menuAnchor : null}
                   showDivider={index > 0}
                   checkedAnimation={animations.checked}
                   mountAnimation={animations.mount}
                   onToggle={() => onToggle(item)}
-                  onToggleMenu={() => onToggleMenu(item.id)}
+                  onToggleMenu={(anchor) => onToggleMenu(item.id, anchor)}
+                  onCloseMenu={onCloseMenu}
+                  onEdit={() => onEdit(item)}
                   onViewProduct={() => onViewProduct(item)}
                   onManagePrice={() => onManagePrice(item)}
                   onRegisterProduct={() => onRegisterProduct(item)}
@@ -91,7 +102,7 @@ export function PendingSection({
 
             if (group.isUnpriced) {
               return (
-                <EmptyPriceGroup key={group.key} count={group.items.length}>
+                <EmptyPriceGroup key={group.key} count={group.items.length} showHeader={hasStoreGroups}>
                   {content}
                 </EmptyPriceGroup>
               );

@@ -2,18 +2,21 @@ import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ShoppingListItem } from '../../domain/shoppingList';
 import { tokens } from '../../theme/tokens';
-import { PendingItemMenu } from './PendingItemMenu';
+import { PendingItemMenu, getItemMenuVisibility } from './PendingItemMenu';
 
 type PendingItemRowProps = {
   item: ShoppingListItem;
   priceLabel: string | null;
   unitPriceLabel: string | null;
   menuOpen?: boolean;
+  menuAnchor: { x: number; y: number } | null;
   showDivider?: boolean;
   checkedAnimation: Animated.Value;
   mountAnimation: Animated.Value;
   onToggle: () => void;
-  onToggleMenu: () => void;
+  onToggleMenu: (anchor: { x: number; y: number }) => void;
+  onCloseMenu: () => void;
+  onEdit: () => void;
   onViewProduct: () => void;
   onManagePrice: () => void;
   onRegisterProduct: () => void;
@@ -25,11 +28,14 @@ export function PendingItemRow({
   priceLabel,
   unitPriceLabel,
   menuOpen,
+  menuAnchor,
   showDivider,
   checkedAnimation,
   mountAnimation,
   onToggle,
   onToggleMenu,
+  onCloseMenu,
+  onEdit,
   onViewProduct,
   onManagePrice,
   onRegisterProduct,
@@ -117,7 +123,7 @@ export function PendingItemRow({
         accessibilityLabel={`Opciones de ${item.text}`}
         onPress={(event) => {
           event.stopPropagation();
-          onToggleMenu();
+          onToggleMenu({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY });
         }}
         style={({ pressed }) => [styles.menuButton, pressed && styles.menuButtonPressed]}
       >
@@ -126,9 +132,10 @@ export function PendingItemRow({
 
       <PendingItemMenu
         visible={Boolean(menuOpen)}
-        canViewProduct={Boolean(item.product_id)}
-        canManagePrice={Boolean(item.product_id)}
-        canRegisterProduct={!item.product_id}
+        anchor={menuAnchor}
+        onClose={onCloseMenu}
+        {...getItemMenuVisibility(Boolean(item.product_id))}
+        onEdit={onEdit}
         onViewProduct={onViewProduct}
         onManagePrice={onManagePrice}
         onRegisterProduct={onRegisterProduct}

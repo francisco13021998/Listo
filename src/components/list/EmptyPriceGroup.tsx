@@ -3,21 +3,24 @@ import { Ionicons } from '@expo/vector-icons';
 
 type EmptyPriceGroupProps = {
   count: number;
+  showHeader?: boolean;
   children: React.ReactNode;
 };
 
-export function EmptyPriceGroup({ count, children }: EmptyPriceGroupProps) {
+export function EmptyPriceGroup({ count, showHeader = true, children }: EmptyPriceGroupProps) {
   return (
     <View style={styles.group}>
-      <View style={styles.header}>
-        <View style={styles.iconWrap}>
-          <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
+      {showHeader ? (
+        <View style={styles.header}>
+          <View style={styles.iconWrap}>
+            <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
+          </View>
+          <View style={styles.titleBlock}>
+            <Text style={styles.title}>Sin precio</Text>
+          </View>
+          <Text style={styles.count}>{count}</Text>
         </View>
-        <View style={styles.titleBlock}>
-          <Text style={styles.title}>Sin precio</Text>
-        </View>
-        <Text style={styles.count}>{count}</Text>
-      </View>
+      ) : null}
       <View style={styles.itemsShell}>
         <View style={styles.items}>{children}</View>
       </View>

@@ -47,6 +47,13 @@ export async function updateProduct(input: UpdateProductInput): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error(error.message);
+
+  const { error: shoppingListError } = await supabase
+    .from('shopping_list_items')
+    .update({ text: name })
+    .eq('product_id', id);
+
+  if (shoppingListError) throw new Error(shoppingListError.message);
 }
 
 export async function deleteProduct(id: string): Promise<void> {

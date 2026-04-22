@@ -2,6 +2,7 @@ import { PropsWithChildren, useEffect, useState } from 'react';
 import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tokens } from '../theme/tokens';
+import { useTabBarHeight } from '../state/tabBarHeight.store';
 
 interface ScreenProps extends PropsWithChildren {
   scrollable?: boolean;
@@ -10,6 +11,7 @@ interface ScreenProps extends PropsWithChildren {
 
 export function Screen({ children, scrollable, includeBottomSafeArea = true }: ScreenProps) {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const tabBarHeight = useTabBarHeight();
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -25,6 +27,8 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
   }, []);
 
   const keyboardGap = keyboardVisible ? 64 : 0;
+  const tabBarGap = tabBarHeight > 0 ? 24 : 0;
+  const bottomGap = Math.max(keyboardGap, tabBarGap);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={includeBottomSafeArea ? ["top", "bottom", "left", "right"] : ["top", "left", "right"]}>
@@ -35,7 +39,7 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
       >
         {scrollable ? (
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: keyboardGap }]}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomGap }]}
             style={styles.flex}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -43,7 +47,7 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
             {children}
           </ScrollView>
         ) : (
-          <View style={[styles.container, { paddingBottom: keyboardGap }]}>{children}</View>
+          <View style={[styles.container, { paddingBottom: bottomGap }]}>{children}</View>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -53,7 +57,7 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: tokens.colors.background,
+    backgroundColor: '#000000',
   },
   flex: {
     flex: 1,

@@ -1,12 +1,17 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { tokens } from '../../theme/tokens';
+import { FloatingMenuAnchor, getFloatingMenuStyle } from '../../lib/floatingMenu';
 
 type PendingItemMenuProps = {
   visible: boolean;
+  anchor: FloatingMenuAnchor | null;
+  onClose: () => void;
+  canEdit: boolean;
   canViewProduct: boolean;
   canManagePrice: boolean;
   canRegisterProduct: boolean;
+  onEdit: () => void;
   onViewProduct: () => void;
   onManagePrice: () => void;
   onRegisterProduct: () => void;
@@ -15,9 +20,13 @@ type PendingItemMenuProps = {
 
 export function PendingItemMenu({
   visible,
+  anchor,
+  onClose,
+  canEdit,
   canViewProduct,
   canManagePrice,
   canRegisterProduct,
+  onEdit,
   onViewProduct,
   onManagePrice,
   onRegisterProduct,
@@ -27,23 +36,36 @@ export function PendingItemMenu({
     return null;
   }
 
+  const menuWidth = 220;
+  const menuHeight = [canEdit, canViewProduct, canManagePrice, canRegisterProduct, true].filter(Boolean).length * 44 + 12;
+  const menuStyle = getFloatingMenuStyle(anchor, { menuWidth, menuHeight });
+
   return (
-    <View style={styles.menu}>
-      {canViewProduct ? (
-        <MenuAction icon="cube-outline" label="Ver producto" onPress={onViewProduct} />
-      ) : null}
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.menu, { width: menuWidth, left: menuStyle.left, top: menuStyle.top }]} onPress={() => undefined}>
+          {canEdit ? <MenuAction icon="pencil-outline" label="Editar elemento" onPress={onEdit} /> : null}
 
-      {canManagePrice ? (
-        <MenuAction icon="pricetag-outline" label="Añadir o editar precio" onPress={onManagePrice} />
-      ) : null}
+          {canViewProduct ? <MenuAction icon="cube-outline" label="Ver producto" onPress={onViewProduct} /> : null}
 
-      {canRegisterProduct ? (
-        <MenuAction icon="add-circle-outline" label="Registrar como producto" onPress={onRegisterProduct} />
-      ) : null}
+          {canManagePrice ? <MenuAction icon="pricetag-outline" label="Añadir precio" onPress={onManagePrice} /> : null}
 
-      <MenuAction icon="trash-outline" label="Eliminar de la lista" onPress={onDelete} danger />
-    </View>
+          {canRegisterProduct ? <MenuAction icon="add-circle-outline" label="Registrar como producto" onPress={onRegisterProduct} /> : null}
+
+          <MenuAction icon="trash-outline" label="Eliminar de la lista" onPress={onDelete} danger />
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
+}
+
+export function getItemMenuVisibility(itemHasProduct: boolean) {
+  return {
+    canEdit: !itemHasProduct,
+    canViewProduct: itemHasProduct,
+    canManagePrice: itemHasProduct,
+    canRegisterProduct: !itemHasProduct,
+  };
 }
 
 function MenuAction({
@@ -66,11 +88,11 @@ function MenuAction({
 }
 
 const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.10)',
+  },
   menu: {
-    position: 'absolute',
-    top: 48,
-    right: 8,
-    zIndex: 60,
     minWidth: 198,
     borderRadius: 16,
     borderWidth: 1,
@@ -81,7 +103,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    elevation: 30,
   },
   menuItem: {
     minHeight: 42,

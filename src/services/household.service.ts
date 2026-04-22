@@ -35,9 +35,52 @@ export async function getMyHouseholds(): Promise<Household[]> {
       id: row.households?.id ?? row.household_id,
       name: row.households?.name ?? 'Hogar',
       createdAt: row.households?.created_at ?? undefined,
+      createdBy: row.households?.created_by ?? undefined,
       memberCount: undefined,
     })) ?? []
   );
+}
+
+export async function renameHousehold(householdId: string, name: string): Promise<void> {
+  const { error } = await supabase.rpc('rename_household', {
+    p_household_id: householdId,
+    p_name: name,
+  });
+
+  if (error) throw error;
+}
+
+export async function getHouseholdMembers(householdId: string): Promise<Array<{ user_id: string; username: string; role: string; created_at: string }>> {
+  const { data: membersData, error: membersError } = await supabase
+    .from('household_members')
+    .select('user_id, role, created_at')
+    .eq('household_id', householdId)
+    .order('created_at', { ascending: true });
+
+  if (membersError) throw membersError;
+
+  const memberIds = (membersData ?? []).map((member) => member.user_id);
+  if (memberIds.length === 0) {
+    return [];
+  }
+
+  const { data: profilesData, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, username')
+    .in('id', memberIds);
+
+  if (profilesError) throw profilesError;
+
+  const usernameById = new Map(
+    (profilesData ?? []).map((profile) => [profile.id, profile.username?.trim() || 'Miembro'])
+  );
+
+  return (membersData ?? []).map((member) => ({
+    user_id: member.user_id,
+    username: usernameById.get(member.user_id) ?? 'Miembro',
+    role: member.role,
+    created_at: member.created_at,
+  }));
 }
 
 export async function createHousehold(name: string, initStores?: string[]): Promise<string> {

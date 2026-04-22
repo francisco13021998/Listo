@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
@@ -8,9 +8,18 @@ import { PrimaryButton } from '../../src/components/PrimaryButton';
 import { SecondaryButton } from '../../src/components/SecondaryButton';
 import { EmptyState } from '../../src/components/EmptyState';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
+import { usePrices } from '../../src/hooks/usePrices';
 import { useProducts } from '../../src/hooks/useProducts';
+import { useStores } from '../../src/hooks/useStores';
 import { Product, ProductUnit } from '../../src/domain/product';
+import {
+  DEFAULT_PRODUCT_CATEGORY,
+  PRODUCT_CATEGORY_OPTIONS,
+  ProductCategoryValue,
+  normalizeProductCategory,
+} from '../../src/domain/productCategories';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
+import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
 import { attachProductToItem } from '../../src/services/shoppingList.service';
 
@@ -19,7 +28,12 @@ type ProductFormState = {
   brand: string;
   quantity: string;
   unit: ProductUnit | '';
-  category: ProductCategory | '';
+  category: ProductCategoryValue;
+};
+
+type InitialPriceFormState = {
+  storeId: string | null;
+  price: string;
 };
 
 type SelectOption<T extends string> = {
@@ -27,39 +41,19 @@ type SelectOption<T extends string> = {
   value: T;
 };
 
-type DropdownField = 'unit' | 'category' | null;
-
-const categoryOptions = [
-  { label: 'Fruta y verdura', value: 'Fruta y verdura' },
-  { label: 'Carnes y charcutería', value: 'Carnes y charcutería' },
-  { label: 'Pescado y marisco', value: 'Pescado y marisco' },
-  { label: 'Lácteos y huevos', value: 'Lácteos y huevos' },
-  { label: 'Panadería y bollería', value: 'Panadería y bollería' },
-  { label: 'Despensa y conservas', value: 'Despensa y conservas' },
-  { label: 'Aceites', value: 'Aceites' },
-  { label: 'Salsas y condimentos', value: 'Salsas y condimentos' },
-  { label: 'Pasta, arroz y legumbres', value: 'Pasta, arroz y legumbres' },
-  { label: 'Aceitunas y encurtidos', value: 'Aceitunas y encurtidos' },
-  { label: 'Congelados', value: 'Congelados' },
-  { label: 'Bebidas', value: 'Bebidas' },
-  { label: 'Café, té e infusiones', value: 'Café, té e infusiones' },
-  { label: 'Snacks y dulces', value: 'Snacks y dulces' },
-  { label: 'Higiene personal', value: 'Aseo personal' },
-  { label: 'Limpieza del hogar', value: 'Limpieza del hogar' },
-  { label: 'Bebés e infantil', value: 'Bebés e infantil' },
-  { label: 'Mascotas', value: 'Mascotas' },
-  { label: 'Parafarmacia y salud', value: 'Salud y farmacia' },
-  { label: 'Otros', value: 'otros' },
-] as const;
-
-type ProductCategory = (typeof categoryOptions)[number]['value'];
+type DropdownField = 'unit' | 'category' | 'priceStore' | null;
 
 const emptyForm = (): ProductFormState => ({
   name: '',
   brand: '',
   quantity: '',
   unit: '',
-  category: '',
+  category: DEFAULT_PRODUCT_CATEGORY,
+});
+
+const emptyInitialPriceForm = (): InitialPriceFormState => ({
+  storeId: null,
+  price: '',
 });
 
 const unitOptions: Array<{ label: string; value: ProductUnit }> = [
@@ -78,6 +72,15 @@ function parseQuantity(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function parsePrice(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function sanitizeQuantityInput(value: string) {
   const cleaned = value.replace(/[^0-9,]/g, '');
   const firstCommaIndex = cleaned.indexOf(',');
@@ -87,10 +90,6 @@ function sanitizeQuantityInput(value: string) {
   }
 
   return cleaned.slice(0, firstCommaIndex + 1) + cleaned.slice(firstCommaIndex + 1).replace(/,/g, '');
-}
-
-function isCategoryOption(value: string): value is ProductCategory {
-  return categoryOptions.some((option) => option.value === value);
 }
 
 function DropdownSelect<T extends string>({
@@ -114,7 +113,7 @@ function DropdownSelect<T extends string>({
   onChange: (value: T) => void;
   setOpenField: (value: DropdownField) => void;
 }) {
-  const selectedLabel = options.find((option) => option.value === value)?.label;
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? (value === DEFAULT_PRODUCT_CATEGORY ? DEFAULT_PRODUCT_CATEGORY : undefined);
   const triggerRef = useRef<View>(null);
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
@@ -126,8 +125,8 @@ function DropdownSelect<T extends string>({
   };
 
   const closeMenu = () => setOpenField(null);
-  const windowHeight = Dimensions.get('window').height;
-  const menuTop = Math.min(anchor.y + anchor.height + 6, windowHeight - 276);
+  const menuHeight = Math.min(260, options.length * 44 + 8);
+  const menuStyle = getFloatingMenuStyle(anchor, { menuWidth: anchor.width, menuHeight });
 
   return (
     <View style={[styles.dropdownField, isOpen && styles.dropdownFieldOpen]}>
@@ -147,8 +146,8 @@ function DropdownSelect<T extends string>({
             style={[
               styles.dropdownMenu,
               {
-                top: menuTop,
-                left: anchor.x,
+                top: menuStyle.top,
+                left: menuStyle.left,
                 width: anchor.width,
               },
             ]}
@@ -184,14 +183,12 @@ function DropdownSelect<T extends string>({
 }
 
 function toFormState(product: Product): ProductFormState {
-  const category = product.category && isCategoryOption(product.category) ? product.category : '';
-
   return {
     name: product.name,
     brand: product.brand ?? '',
     quantity: product.quantity === null ? '' : String(product.quantity),
     unit: product.unit ?? '',
-    category,
+    category: normalizeProductCategory(product.category),
   };
 }
 
@@ -199,9 +196,12 @@ export default function ProductEditorModal() {
   const router = useRouter();
   const { activeHouseholdId } = useActiveHousehold();
   const { products, loading: productsLoading, createProduct, updateProduct } = useProducts(activeHouseholdId);
+  const { stores, loading: storesLoading } = useStores(activeHouseholdId);
+  const { addPrice: createPrice } = usePrices(activeHouseholdId);
   const params = useLocalSearchParams<{ productId?: string | string[] }>();
   const productId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
   const prefillNameParam = Array.isArray(params.name) ? params.name[0] : params.name;
+  const selectedStoreIdFromRoute = Array.isArray(params.selectedStoreId) ? params.selectedStoreId[0] : params.selectedStoreId;
   const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId)
     ? params.sourceShoppingItemId[0]
     : params.sourceShoppingItemId;
@@ -209,6 +209,8 @@ export default function ProductEditorModal() {
   const shouldMarkShoppingItemAsBought = markAsBoughtParam !== 'false';
   const isEditing = Boolean(productId);
   const [form, setForm] = useState<ProductFormState>(emptyForm());
+  const [initialPriceForm, setInitialPriceForm] = useState<InitialPriceFormState>(emptyInitialPriceForm());
+  const [includeInitialPrice, setIncludeInitialPrice] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasLoadedProducts, setHasLoadedProducts] = useState(false);
   const [openField, setOpenField] = useState<DropdownField>(null);
@@ -224,13 +226,18 @@ export default function ProductEditorModal() {
         ...emptyForm(),
         name: prefillNameParam?.trim() ? prefillNameParam : current.name,
       }));
+      setIncludeInitialPrice(false);
+      setInitialPriceForm({
+        ...emptyInitialPriceForm(),
+        storeId: selectedStoreIdFromRoute?.trim() ? selectedStoreIdFromRoute : null,
+      });
       return;
     }
 
     if (selectedProduct) {
       setForm(toFormState(selectedProduct));
     }
-  }, [isEditing, prefillNameParam, selectedProduct]);
+  }, [isEditing, prefillNameParam, selectedProduct, selectedStoreIdFromRoute]);
 
   useEffect(() => {
     if (productsLoading) {
@@ -263,6 +270,23 @@ export default function ProductEditorModal() {
       return;
     }
 
+    const shouldCreateInitialPrice = !isEditing && includeInitialPrice;
+
+    if (shouldCreateInitialPrice) {
+      if (!initialPriceForm.storeId) {
+        void hapticError();
+        Alert.alert('Tienda requerida', 'Selecciona una tienda para guardar el precio inicial, o deja la sección vacía.');
+        return;
+      }
+
+      const priceValue = parsePrice(initialPriceForm.price);
+      if (!priceValue || priceValue <= 0) {
+        void hapticError();
+        Alert.alert('Precio inválido', 'Introduce un precio inicial válido, o deja la sección vacía.');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const quantity = parseQuantity(form.quantity);
@@ -289,6 +313,18 @@ export default function ProductEditorModal() {
           category: form.category,
         });
 
+        if (shouldCreateInitialPrice) {
+          const priceValue = parsePrice(initialPriceForm.price);
+
+          await createPrice({
+            productId: createdProduct.id,
+            storeId: initialPriceForm.storeId as string,
+            priceCents: Math.round((priceValue as number) * 100),
+            quantity,
+            unit: form.unit,
+          });
+        }
+
         if (sourceShoppingItemId) {
           await attachProductToItem({
             itemId: sourceShoppingItemId,
@@ -314,6 +350,14 @@ export default function ProductEditorModal() {
   const subtitle = isEditing
     ? 'Actualiza el nombre, marca, cantidad, unidad y categoría.'
     : 'Añade un nuevo producto al catálogo de tu hogar.';
+
+  const sortedStores = useMemo(
+    () =>
+      [...stores]
+        .sort((left, right) => left.name.localeCompare(right.name))
+        .map((store) => ({ label: store.name, value: store.id })),
+    [stores]
+  );
 
   if (!activeHouseholdId) {
     return (
@@ -405,10 +449,10 @@ export default function ProductEditorModal() {
             </View>
           </View>
           <DropdownSelect
-            label="Categoría"
-            placeholder="Selecciona una categoría"
+            label="Categoría (opcional)"
+            placeholder={DEFAULT_PRODUCT_CATEGORY}
             value={form.category}
-            options={categoryOptions}
+            options={PRODUCT_CATEGORY_OPTIONS}
             isOpen={openField === 'category'}
             field="category"
             onToggle={() => setOpenField((current) => (current === 'category' ? null : 'category'))}
@@ -418,6 +462,74 @@ export default function ProductEditorModal() {
             }}
             setOpenField={setOpenField}
           />
+
+          {!isEditing ? (
+            <View style={styles.priceOptionalBlock}>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: includeInitialPrice }}
+                onPress={() =>
+                  setIncludeInitialPrice((current) => {
+                    const next = !current;
+                    if (!next) {
+                      setOpenField((field) => (field === 'priceStore' ? null : field));
+                    }
+                    return next;
+                  })
+                }
+                style={({ pressed }) => [styles.priceToggle, pressed && styles.priceTogglePressed]}
+              >
+                <View style={[styles.checkboxBox, includeInitialPrice && styles.checkboxBoxChecked]}>
+                  {includeInitialPrice ? <Text style={styles.checkboxMark}>✓</Text> : null}
+                </View>
+                <View style={styles.priceToggleTextBlock}>
+                  <Text style={styles.priceToggleTitle}>Registrar precio inicial</Text>
+                  <Text style={styles.priceToggleSubtitle}>Opcional. Actívalo para incluir tienda, precio y medida.</Text>
+                </View>
+              </Pressable>
+
+              {includeInitialPrice ? (
+                <View style={styles.priceForm}>
+                  {storesLoading ? (
+                    <View style={styles.loadingCard}>
+                      <Text style={styles.loadingText}>Cargando tiendas…</Text>
+                    </View>
+                  ) : sortedStores.length === 0 ? (
+                    <View style={styles.emptyPriceHint}>
+                      <Text style={styles.emptyPriceHintText}>
+                        No hay tiendas creadas todavía. Puedes guardar el producto sin precio y añadirlo después.
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <DropdownSelect
+                        label="Tienda"
+                        placeholder="Selecciona una tienda"
+                        value={initialPriceForm.storeId ?? ''}
+                        options={sortedStores}
+                        isOpen={openField === 'priceStore'}
+                        field="priceStore"
+                        onToggle={() => setOpenField((current) => (current === 'priceStore' ? null : 'priceStore'))}
+                        onChange={(storeId) => {
+                          setInitialPriceForm((current) => ({ ...current, storeId }));
+                          setOpenField(null);
+                        }}
+                        setOpenField={setOpenField}
+                      />
+
+                      <AppInput
+                        label="Precio"
+                        placeholder="Ej. 1,99"
+                        value={initialPriceForm.price}
+                        onChangeText={(text) => setInitialPriceForm((current) => ({ ...current, price: text }))}
+                        keyboardType="decimal-pad"
+                      />
+                    </>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={styles.actions}>
             <PrimaryButton
@@ -444,6 +556,88 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginTop: -6,
+  },
+  priceOptionalBlock: {
+    gap: 10,
+    paddingTop: 2,
+    paddingBottom: 4,
+  },
+  priceToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDE8DF',
+    backgroundColor: '#F8FBF8',
+  },
+  priceTogglePressed: {
+    opacity: 0.96,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    marginTop: 1,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#B8C9BE',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxBoxChecked: {
+    borderColor: tokens.colors.primaryDark,
+    backgroundColor: tokens.colors.primaryDark,
+  },
+  checkboxMark: {
+    color: tokens.colors.surface,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 12,
+  },
+  priceToggleTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  priceToggleTitle: {
+    color: tokens.colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  priceToggleSubtitle: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  priceForm: {
+    gap: 10,
+    paddingLeft: 30,
+  },
+  emptyPriceHint: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+  },
+  emptyPriceHintText: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  loadingCard: {
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  loadingText: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
   },
   quantityRow: {
     flexDirection: 'row',
@@ -545,5 +739,6 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 8,
+    marginTop: 6,
   },
 });

@@ -17,12 +17,13 @@ function getInitials(value: string) {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { session } = useSession();
+  const { session, profileUsername } = useSession();
   const { activeHouseholdId } = useActiveHousehold();
 
   const email = session?.user?.email ?? 'Sin correo disponible';
+  const username = profileUsername ?? 'Usuario';
 
-  const initials = useMemo(() => getInitials(session?.user?.user_metadata?.display_name ?? email), [email, session?.user?.user_metadata?.display_name]);
+  const initials = useMemo(() => getInitials(username), [username]);
 
   return (
     <Screen scrollable includeBottomSafeArea={false}>
@@ -53,7 +54,7 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.profileTextBlock}>
-              <Text style={styles.profileName}>Tu cuenta</Text>
+              <Text style={styles.profileName}>{username}</Text>
               <Text style={styles.profileEmail}>{email}</Text>
             </View>
           </View>
@@ -69,6 +70,10 @@ export default function ProfileScreen() {
               </View>
             </View>
 
+            <View style={styles.metaRow}>
+              <Text style={styles.metaLabel}>Usuario</Text>
+              <Text style={styles.metaValue}>{username}</Text>
+            </View>
             <View style={styles.metaRow}>
               <Text style={styles.metaLabel}>Estado</Text>
               <Text style={styles.metaValue}>Sesión activa</Text>

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 type ActiveHouseholdContextValue = {
   activeHouseholdId: string | null;
@@ -9,32 +10,74 @@ type ActiveHouseholdContextValue = {
 
 const ActiveHouseholdContext = createContext<ActiveHouseholdContextValue | null>(null);
 
-const STORAGE_KEY = 'listo.activeHouseholdId';
+const STORAGE_KEY_PREFIX = 'listo.activeHouseholdId';
+
+function getStorageKey(userId: string | null) {
+  return `${STORAGE_KEY_PREFIX}:${userId ?? 'anonymous'}`;
+}
 
 export function ActiveHouseholdProvider({ children }: { children: React.ReactNode }) {
   const [activeHouseholdId, setActiveHouseholdIdState] = useState<string | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [storageKey, setStorageKey] = useState(() => getStorageKey(null));
 
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+
+    const loadForUser = async (key: string) => {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        setActiveHouseholdIdState(stored);
+        const stored = await AsyncStorage.getItem(key);
+        if (!cancelled) {
+          setActiveHouseholdIdState(stored);
+        }
       } finally {
-        setIsHydrated(true);
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
       }
     };
 
-    void load();
+    const bootstrap = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) {
+        return;
+      }
+
+      const nextStorageKey = getStorageKey(data.session?.user?.id ?? null);
+      setStorageKey(nextStorageKey);
+      await loadForUser(nextStorageKey);
+    };
+
+    void bootstrap();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      const nextStorageKey = getStorageKey(nextSession?.user?.id ?? null);
+      setStorageKey(nextStorageKey);
+      setActiveHouseholdIdState(null);
+      setIsHydrated(false);
+
+      void (async () => {
+        const stored = await AsyncStorage.getItem(nextStorageKey);
+        if (!cancelled) {
+          setActiveHouseholdIdState(stored);
+          setIsHydrated(true);
+        }
+      })();
+    });
+
+    return () => {
+      cancelled = true;
+      subscription?.subscription.unsubscribe();
+    };
   }, []);
 
   const setActiveHouseholdId = async (id: string | null) => {
     setActiveHouseholdIdState(id);
 
     if (id) {
-      await AsyncStorage.setItem(STORAGE_KEY, id);
+      await AsyncStorage.setItem(storageKey, id);
     } else {
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      await AsyncStorage.removeItem(storageKey);
     }
   };
 
