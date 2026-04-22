@@ -650,6 +650,7 @@ export default function ListScreen() {
       pathname: '/modals/price-editor',
       params: {
         productId: item.product_id,
+        sourceShoppingItemId: item.id,
         returnTo: '/(tabs)/list',
         selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
       },
@@ -664,7 +665,6 @@ export default function ListScreen() {
       params: {
         name: item.text,
         sourceShoppingItemId: item.id,
-        markAsBought: 'false',
         selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
       },
     });

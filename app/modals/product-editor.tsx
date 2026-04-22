@@ -81,6 +81,28 @@ function parsePrice(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function formatDecimal(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(value < 10 ? 3 : 2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function getReferenceUnit(unit: ProductUnit | '') {
+  if (unit === 'g' || unit === 'kg') return 'kg';
+  if (unit === 'ml' || unit === 'l') return 'l';
+  if (unit === 'u') return 'u';
+  return null;
+}
+
+function normalizeQuantity(quantity: number | null, unit: ProductUnit | '') {
+  if (!quantity || quantity <= 0 || !unit) return null;
+
+  if (unit === 'kg') return quantity;
+  if (unit === 'g') return quantity / 1000;
+  if (unit === 'l') return quantity;
+  if (unit === 'ml') return quantity / 1000;
+  if (unit === 'u') return quantity;
+  return null;
+}
+
 function sanitizeQuantityInput(value: string) {
   const cleaned = value.replace(/[^0-9,]/g, '');
   const firstCommaIndex = cleaned.indexOf(',');
@@ -205,15 +227,30 @@ export default function ProductEditorModal() {
   const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId)
     ? params.sourceShoppingItemId[0]
     : params.sourceShoppingItemId;
-  const markAsBoughtParam = Array.isArray(params.markAsBought) ? params.markAsBought[0] : params.markAsBought;
-  const shouldMarkShoppingItemAsBought = markAsBoughtParam !== 'false';
+  const canMarkAsBought = Boolean(sourceShoppingItemId);
   const isEditing = Boolean(productId);
   const [form, setForm] = useState<ProductFormState>(emptyForm());
   const [initialPriceForm, setInitialPriceForm] = useState<InitialPriceFormState>(emptyInitialPriceForm());
   const [includeInitialPrice, setIncludeInitialPrice] = useState(false);
+  const [markAsBought, setMarkAsBought] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasLoadedProducts, setHasLoadedProducts] = useState(false);
   const [openField, setOpenField] = useState<DropdownField>(null);
+  const productQuantity = useMemo(() => parseQuantity(form.quantity), [form.quantity]);
+  const productReferenceUnit = useMemo(() => getReferenceUnit(form.unit), [form.unit]);
+  const initialPriceValue = useMemo(() => parsePrice(initialPriceForm.price), [initialPriceForm.price]);
+  const initialPriceNormalizedQuantity = useMemo(
+    () => normalizeQuantity(productQuantity, form.unit),
+    [form.unit, productQuantity]
+  );
+  const initialPricePerReferenceUnitLabel = useMemo(() => {
+    if (!initialPriceValue || !initialPriceNormalizedQuantity || !productReferenceUnit) {
+      return null;
+    }
+
+    const pricePerReferenceUnit = initialPriceValue / initialPriceNormalizedQuantity;
+    return `${formatDecimal(pricePerReferenceUnit).replace('.', ',')} €/${productReferenceUnit === 'u' ? 'unidad' : productReferenceUnit}`;
+  }, [initialPriceNormalizedQuantity, initialPriceValue, productReferenceUnit]);
 
   const selectedProduct = useMemo(() => {
     if (!productId) return null;
@@ -227,6 +264,7 @@ export default function ProductEditorModal() {
         name: prefillNameParam?.trim() ? prefillNameParam : current.name,
       }));
       setIncludeInitialPrice(false);
+      setMarkAsBought(false);
       setInitialPriceForm({
         ...emptyInitialPriceForm(),
         storeId: selectedStoreIdFromRoute?.trim() ? selectedStoreIdFromRoute : null,
@@ -330,7 +368,7 @@ export default function ProductEditorModal() {
             itemId: sourceShoppingItemId,
             productId: createdProduct.id,
             text: createdProduct.name,
-            markAsChecked: shouldMarkShoppingItemAsBought,
+            markAsChecked: markAsBought,
           });
         }
       }
@@ -517,18 +555,48 @@ export default function ProductEditorModal() {
                         setOpenField={setOpenField}
                       />
 
-                      <AppInput
-                        label="Precio"
-                        placeholder="Ej. 1,99"
-                        value={initialPriceForm.price}
-                        onChangeText={(text) => setInitialPriceForm((current) => ({ ...current, price: text }))}
-                        keyboardType="decimal-pad"
-                      />
+                      <View style={styles.initialPriceRow}>
+                        <View style={styles.initialPriceInputWrap}>
+                          <AppInput
+                            label="Precio"
+                            placeholder="Ej. 1,99"
+                            value={initialPriceForm.price}
+                            onChangeText={(text) => setInitialPriceForm((current) => ({ ...current, price: text }))}
+                            keyboardType="decimal-pad"
+                          />
+                        </View>
+
+                        <View style={styles.initialPriceReferenceBox}>
+                          <Text style={styles.initialPriceReferenceLabel}>Equivale a</Text>
+                          <Text style={styles.initialPriceReferenceValue}>
+                            {initialPricePerReferenceUnitLabel ?? '—'}
+                          </Text>
+                        </View>
+                      </View>
                     </>
                   )}
                 </View>
               ) : null}
             </View>
+          ) : null}
+
+          {canMarkAsBought ? (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: markAsBought }}
+              onPress={() => setMarkAsBought((current) => !current)}
+              style={({ pressed }) => [styles.shoppingToggle, pressed && styles.shoppingTogglePressed]}
+            >
+              <View style={[styles.checkboxBox, markAsBought && styles.checkboxBoxChecked]}>
+                {markAsBought ? <Text style={styles.checkboxMark}>✓</Text> : null}
+              </View>
+              <View style={styles.shoppingToggleTextBlock}>
+                <Text style={styles.shoppingToggleTitle}>Marcar como comprado</Text>
+                <Text style={styles.shoppingToggleSubtitle}>
+                  Úsalo si quieres cerrar este elemento de la lista al guardar el producto.
+                </Text>
+              </View>
+            </Pressable>
           ) : null}
 
           <View style={styles.actions}>
@@ -561,6 +629,19 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingTop: 2,
     paddingBottom: 4,
+  },
+  shoppingToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDE8DF',
+    backgroundColor: '#F8FBF8',
+  },
+  shoppingTogglePressed: {
+    opacity: 0.96,
   },
   priceToggle: {
     flexDirection: 'row',
@@ -595,6 +676,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     lineHeight: 12,
+  },
+  shoppingToggleTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  shoppingToggleTitle: {
+    color: tokens.colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  shoppingToggleSubtitle: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 15,
   },
   priceToggleTextBlock: {
     flex: 1,
@@ -638,6 +733,36 @@ const styles = StyleSheet.create({
   loadingText: {
     color: tokens.colors.textMuted,
     fontSize: 12,
+  },
+  initialPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  initialPriceInputWrap: {
+    flex: 0.9,
+  },
+  initialPriceReferenceBox: {
+    flex: 1.1,
+    minHeight: 44,
+    borderWidth: 1,
+    borderColor: '#DDE8DF',
+    borderRadius: 16,
+    backgroundColor: '#F8FBF8',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  initialPriceReferenceLabel: {
+    color: tokens.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  initialPriceReferenceValue: {
+    color: tokens.colors.primaryDark,
+    fontSize: 13,
+    fontWeight: '800',
   },
   quantityRow: {
     flexDirection: 'row',

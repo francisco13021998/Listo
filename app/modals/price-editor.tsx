@@ -11,6 +11,7 @@ import { useProducts } from '../../src/hooks/useProducts';
 import { usePrices } from '../../src/hooks/usePrices';
 import { useStores } from '../../src/hooks/useStores';
 import { getPriceEntryById, updatePriceEntry } from '../../src/services/prices.service';
+import { toggleItem } from '../../src/services/shoppingList.service';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
@@ -67,11 +68,14 @@ export default function PriceEditorModal() {
     priceId?: string | string[];
     returnTo?: string | string[];
     selectedStoreId?: string | string[];
+    sourceShoppingItemId?: string | string[];
+    markAsBought?: string | string[];
   }>();
   const productId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
   const priceId = Array.isArray(params.priceId) ? params.priceId[0] : params.priceId;
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const selectedStoreIdFromRoute = Array.isArray(params.selectedStoreId) ? params.selectedStoreId[0] : params.selectedStoreId;
+  const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId) ? params.sourceShoppingItemId[0] : params.sourceShoppingItemId;
   const { activeHouseholdId } = useActiveHousehold();
   const { products } = useProducts(activeHouseholdId);
   const { stores, loading: storesLoading } = useStores(activeHouseholdId);
@@ -82,6 +86,7 @@ export default function PriceEditorModal() {
   const [priceText, setPriceText] = useState('');
   const [quantityText, setQuantityText] = useState('');
   const [selectedUnit, setSelectedUnit] = useState<ProductUnit | ''>('');
+  const [markAsBought, setMarkAsBought] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasLoadedStores, setHasLoadedStores] = useState(false);
   const [loadedPriceEntry, setLoadedPriceEntry] = useState(false);
@@ -279,6 +284,10 @@ export default function PriceEditorModal() {
           quantity,
           unit: selectedUnit || null,
         });
+      }
+
+      if (sourceShoppingItemId && markAsBought) {
+        await toggleItem(sourceShoppingItemId, true);
       }
 
       await refreshPrices();
@@ -544,6 +553,25 @@ export default function PriceEditorModal() {
               <Text style={styles.previewPriceTextMuted}>Completa precio, cantidad y unidad para ver el cálculo por kg, litro o unidad.</Text>
             ) : null}
           </View>
+
+          {sourceShoppingItemId ? (
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: markAsBought }}
+              onPress={() => setMarkAsBought((current) => !current)}
+              style={({ pressed }) => [styles.shoppingToggle, pressed && styles.shoppingTogglePressed]}
+            >
+              <View style={[styles.checkboxBox, markAsBought && styles.checkboxBoxChecked]}>
+                {markAsBought ? <Text style={styles.checkboxMark}>✓</Text> : null}
+              </View>
+              <View style={styles.shoppingToggleTextBlock}>
+                <Text style={styles.shoppingToggleTitle}>Marcar como comprado</Text>
+                <Text style={styles.shoppingToggleSubtitle}>
+                  Marca este elemento como comprado al guardar el precio.
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
 
           <View style={styles.actions}>
             <PrimaryButton title="Guardar" onPress={handleSave} loading={saving} disabled={saving} fullWidth />
@@ -957,6 +985,54 @@ const styles = StyleSheet.create({
     color: tokens.colors.textMuted,
     fontSize: 12,
     lineHeight: 16,
+  },
+  shoppingToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#DDE8DF',
+    backgroundColor: '#F8FBF8',
+  },
+  shoppingTogglePressed: {
+    opacity: 0.96,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    marginTop: 1,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#B8C9BE',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxBoxChecked: {
+    borderColor: tokens.colors.primaryDark,
+    backgroundColor: tokens.colors.primaryDark,
+  },
+  checkboxMark: {
+    color: tokens.colors.surface,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 12,
+  },
+  shoppingToggleTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  shoppingToggleTitle: {
+    color: tokens.colors.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  shoppingToggleSubtitle: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 15,
   },
   actions: {
     gap: 8,

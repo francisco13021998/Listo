@@ -8,7 +8,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <StatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
       <ActiveHouseholdProvider>
-        <Stack>
+        <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(gate)" options={{ headerShown: false }} />
