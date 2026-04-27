@@ -131,12 +131,12 @@ export function BoughtSection({
 
 const styles = StyleSheet.create({
   card: {
-    gap: 12,
+    gap: 10,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 2,
   },
   titleBlock: {
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#111827',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   headerActions: {
@@ -157,8 +157,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
-    height: 30,
+    paddingHorizontal: 9,
+    height: 28,
     borderRadius: 999,
     backgroundColor: '#F2F4F7',
   },
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   },
   actionButtonText: {
     color: '#667085',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
   },
   subtitle: {
@@ -190,27 +190,27 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   emptyState: {
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: '#F6F8F7',
     borderWidth: 1,
     borderColor: '#E3E8E5',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   emptyTitle: {
     color: '#111827',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
   },
   rows: {
-    gap: 8,
+    gap: 6,
     overflow: 'visible',
   },
   row: {
     position: 'relative',
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: '#F6F8F7',
     borderWidth: 1,
     borderColor: '#E3E8E5',
@@ -224,16 +224,16 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
   },
   rowPressed: {
     opacity: 0.92,
   },
   rowCheck: {
-    width: 26,
-    height: 26,
+    width: 22,
+    height: 22,
     borderRadius: 999,
     backgroundColor: '#E7F6ED',
     alignItems: 'center',
@@ -241,26 +241,26 @@ const styles = StyleSheet.create({
   },
   rowCheckText: {
     color: '#176B3A',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '800',
   },
   rowText: {
     flex: 1,
     color: '#98A2B3',
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
     textDecorationLine: 'line-through',
   },
   menuButton: {
     position: 'relative',
     zIndex: 1001,
-    width: 42,
-    height: 42,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,
-    borderRadius: 12,
+    borderRadius: 10,
     backgroundColor: '#EEF7F0',
   },
   menuButtonPressed: {

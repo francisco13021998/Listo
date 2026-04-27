@@ -42,7 +42,12 @@ export function LeaveHouseholdDialog({
 
           {isDeletingLastMember ? (
             <>
-              <Text style={styles.warningText}>Para continuar, escribe exactamente el nombre del hogar:</Text>
+              <Text style={styles.warningText}>Para continuar, escribe exactamente este nombre:</Text>
+              <View style={styles.nameBox}>
+                <Text selectable style={styles.nameBoxText}>
+                  {householdName}
+                </Text>
+              </View>
               <AppInput
                 label="Nombre del hogar"
                 placeholder={householdName}
@@ -104,6 +109,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '600',
+  },
+  nameBox: {
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#FDF2F8',
+    borderWidth: 1,
+    borderColor: '#F9A8D4',
+  },
+  nameBoxText: {
+    color: '#831843',
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
   },
   errorText: {
     color: '#B42318',

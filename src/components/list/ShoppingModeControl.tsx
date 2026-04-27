@@ -119,11 +119,16 @@ export function ShoppingModeControl({ stores, enabled, selectedStoreId, onToggle
 const styles = StyleSheet.create({
   card: {
     gap: 10,
-    padding: 12,
-    borderRadius: 18,
+    padding: 14,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#DDE8DF',
     backgroundColor: '#FFFFFF',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   row: {
     flexDirection: 'row',

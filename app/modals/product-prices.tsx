@@ -292,6 +292,11 @@ export default function ProductDetailScreen() {
           loading={loading}
           error={error}
           storeCount={storeCount}
+          onAddPrice={() => {
+            if (!productId) return;
+            closeOverlays();
+            router.push({ pathname: '/modals/price-editor', params: { productId, returnTo: '/modals/product-prices' } });
+          }}
           onOpenEntryMenu={(entryId, anchor) => {
             setProductMenuOpen(false);
             setOpenEntryMenuId(entryId);

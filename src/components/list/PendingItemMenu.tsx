@@ -18,6 +18,17 @@ type PendingItemMenuProps = {
   onDelete: () => void;
 };
 
+type ActionItem = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+};
+
+function isActionItem(value: ActionItem | null): value is ActionItem {
+  return value !== null;
+}
+
 export function PendingItemMenu({
   visible,
   anchor,
@@ -37,22 +48,40 @@ export function PendingItemMenu({
   }
 
   const menuWidth = 220;
-  const menuHeight = [canEdit, canViewProduct, canManagePrice, canRegisterProduct, true].filter(Boolean).length * 44 + 12;
+  const unorderedActions: Array<ActionItem | null> = canRegisterProduct
+    ? [
+        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Añadir producto', onPress: onRegisterProduct } : null,
+        canEdit ? { icon: 'pencil-outline' as const, label: 'Editar elemento', onPress: onEdit } : null,
+        canViewProduct ? { icon: 'cube-outline' as const, label: 'Ver producto', onPress: onViewProduct } : null,
+        canManagePrice ? { icon: 'pricetag-outline' as const, label: 'Añadir precio', onPress: onManagePrice } : null,
+        { icon: 'trash-outline' as const, label: 'Eliminar de la lista', onPress: onDelete, danger: true },
+      ]
+    : [
+        canEdit ? { icon: 'pencil-outline' as const, label: 'Editar elemento', onPress: onEdit } : null,
+        canViewProduct ? { icon: 'cube-outline' as const, label: 'Ver producto', onPress: onViewProduct } : null,
+        canManagePrice ? { icon: 'pricetag-outline' as const, label: 'Añadir precio', onPress: onManagePrice } : null,
+        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Añadir producto', onPress: onRegisterProduct } : null,
+        { icon: 'trash-outline' as const, label: 'Eliminar de la lista', onPress: onDelete, danger: true },
+      ];
+
+  const orderedActions: ActionItem[] = unorderedActions.filter(isActionItem);
+
+  const menuHeight = orderedActions.length * 44 + 12;
   const menuStyle = getFloatingMenuStyle(anchor, { menuWidth, menuHeight });
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={[styles.menu, { width: menuWidth, left: menuStyle.left, top: menuStyle.top }]} onPress={() => undefined}>
-          {canEdit ? <MenuAction icon="pencil-outline" label="Editar elemento" onPress={onEdit} /> : null}
-
-          {canViewProduct ? <MenuAction icon="cube-outline" label="Ver producto" onPress={onViewProduct} /> : null}
-
-          {canManagePrice ? <MenuAction icon="pricetag-outline" label="Añadir precio" onPress={onManagePrice} /> : null}
-
-          {canRegisterProduct ? <MenuAction icon="add-circle-outline" label="Registrar como producto" onPress={onRegisterProduct} /> : null}
-
-          <MenuAction icon="trash-outline" label="Eliminar de la lista" onPress={onDelete} danger />
+          {orderedActions.map((action) => (
+            <MenuAction
+              key={action.label}
+              icon={action.icon}
+              label={action.label}
+              onPress={action.onPress}
+              danger={action.danger}
+            />
+          ))}
         </Pressable>
       </Pressable>
     </Modal>

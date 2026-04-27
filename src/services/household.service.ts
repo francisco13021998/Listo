@@ -31,13 +31,17 @@ export async function getMyHouseholds(): Promise<Household[]> {
   if (error) throw error;
 
   return (
-    data?.map((row) => ({
-      id: row.households?.id ?? row.household_id,
-      name: row.households?.name ?? 'Hogar',
-      createdAt: row.households?.created_at ?? undefined,
-      createdBy: row.households?.created_by ?? undefined,
-      memberCount: undefined,
-    })) ?? []
+    data?.map((row) => {
+      const household = Array.isArray(row.households) ? row.households[0] : row.households;
+
+      return {
+        id: household?.id ?? row.household_id,
+        name: household?.name ?? 'Hogar',
+        createdAt: household?.created_at ?? undefined,
+        createdBy: household?.created_by ?? undefined,
+        memberCount: undefined,
+      };
+    }) ?? []
   );
 }
 

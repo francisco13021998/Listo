@@ -45,6 +45,7 @@ export default function TabsLayout() {
         initialRouteName="list"
         screenOptions={({ route }) => ({
           headerShown: false,
+          tabBarHideOnKeyboard: true,
           tabBarActiveTintColor: tokens.colors.primaryDark,
           tabBarInactiveTintColor: '#7C8798',
           tabBarStyle: {
@@ -69,7 +70,7 @@ export default function TabsLayout() {
 
             return (
               <Pressable
-                {...props}
+                {...(props as any)}
                 disabled={disabled || props.disabled}
                 style={({ pressed }) => [
                   props.style,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { CreateProductInput, Product, UpdateProductInput } from '../domain/product';
 import { createProduct, deleteProduct, listProducts, updateProduct } from '../services/product.service';
 
@@ -8,7 +8,7 @@ const noop = () => {
 
 export function useProducts(householdId: string | null) {
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(householdId));
   const [error, setError] = useState<string | null>(null);
 
   type ProductCreateArgs = Omit<CreateProductInput, 'householdId'> | string;
@@ -56,17 +56,14 @@ export function useProducts(householdId: string | null) {
 
   const update = useCallback(
     async (input: ProductUpdateArgs, nameMaybe?: string) => {
-      const productInput =
-        typeof input === 'string'
-          ? { id: input, name: nameMaybe ?? '' }
-          : {
-              id: input.id,
-              name: input.name,
-              brand: input.brand ?? null,
-              quantity: input.quantity ?? null,
-              unit: input.unit ?? null,
-              category: input.category ?? null,
-            };
+      const productInput: UpdateProductInput = {
+        id: input.id,
+        name: input.name || nameMaybe || '',
+        brand: 'brand' in input ? input.brand ?? null : null,
+        quantity: 'quantity' in input ? input.quantity ?? null : null,
+        unit: 'unit' in input ? input.unit ?? null : null,
+        category: 'category' in input ? input.category ?? null : null,
+      };
 
       if (!productInput.name) throw new Error('El nombre del producto es obligatorio');
 
@@ -84,7 +81,7 @@ export function useProducts(householdId: string | null) {
     [refresh]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void refresh();
   }, [refresh]);
 

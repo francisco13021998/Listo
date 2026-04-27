@@ -11,6 +11,7 @@ import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useStores } from '../../src/hooks/useStores';
 import { Store } from '../../src/domain/store';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
+import { peekProductEditorDraft, saveProductEditorDraft } from '../../src/state/storeCreationDrafts.store';
 
 type StoreFormState = {
   name: string;
@@ -36,12 +37,20 @@ export default function StoreEditorModal() {
     productId?: string | string[];
     priceId?: string | string[];
     finalReturnTo?: string | string[];
+    sourceShoppingItemId?: string | string[];
+    sourceShoppingItemChecked?: string | string[];
+    shoppingModeActive?: string | string[];
   }>();
   const storeId = Array.isArray(params.storeId) ? params.storeId[0] : params.storeId;
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const returnProductId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
   const returnPriceId = Array.isArray(params.priceId) ? params.priceId[0] : params.priceId;
   const finalReturnTo = Array.isArray(params.finalReturnTo) ? params.finalReturnTo[0] : params.finalReturnTo;
+  const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId) ? params.sourceShoppingItemId[0] : params.sourceShoppingItemId;
+  const sourceShoppingItemChecked = Array.isArray(params.sourceShoppingItemChecked)
+    ? params.sourceShoppingItemChecked[0]
+    : params.sourceShoppingItemChecked;
+  const shoppingModeActive = Array.isArray(params.shoppingModeActive) ? params.shoppingModeActive[0] : params.shoppingModeActive;
   const isEditing = Boolean(storeId);
   const [form, setForm] = useState<StoreFormState>(emptyForm());
   const [saving, setSaving] = useState(false);
@@ -107,6 +116,23 @@ export default function StoreEditorModal() {
       const createdStore = await createStore(name);
       void hapticSuccess();
 
+      if (returnTo === '/modals/product-editor') {
+        const existingDraft = peekProductEditorDraft();
+
+        if (existingDraft) {
+          saveProductEditorDraft({
+            ...existingDraft,
+            initialPriceStoreId: createdStore.id,
+            sourceShoppingItemId: existingDraft.sourceShoppingItemId ?? sourceShoppingItemId ?? null,
+            sourceShoppingItemChecked: existingDraft.sourceShoppingItemChecked ?? sourceShoppingItemChecked === 'true',
+            shoppingModeActive: existingDraft.shoppingModeActive ?? (shoppingModeActive === 'true'),
+          });
+        }
+
+        router.back();
+        return;
+      }
+
       if (returnTo === '/modals/price-editor' && returnProductId) {
         router.replace({
           pathname: '/modals/price-editor',
@@ -115,6 +141,8 @@ export default function StoreEditorModal() {
             priceId: returnPriceId ?? '',
             returnTo: finalReturnTo ?? '',
             selectedStoreId: createdStore.id,
+            sourceShoppingItemId: sourceShoppingItemId ?? '',
+            sourceShoppingItemChecked: sourceShoppingItemChecked ?? '',
           },
         });
         return;

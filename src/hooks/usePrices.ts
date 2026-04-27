@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { PriceEntry, PriceInsight } from '../domain/prices';
 import { addPrice, getPriceInsightsForHousehold, listPriceHistory } from '../services/prices.service';
 
-const noop = () => {
+const noop = async () => {
   // no-op
 };
 
@@ -27,7 +27,7 @@ type UsePricesResult = {
 export function usePrices(householdId: string | null): UsePricesResult {
   const [latestByProductId, setLatestByProductId] = useState<Record<string, PriceEntry>>({});
   const [insightsByProductId, setInsightsByProductId] = useState<Record<string, PriceInsight>>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(householdId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -82,7 +82,7 @@ export function usePrices(householdId: string | null): UsePricesResult {
     [householdId]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void refresh();
   }, [refresh]);
 

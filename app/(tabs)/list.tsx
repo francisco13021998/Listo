@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
+  ActivityIndicator,
   Keyboard,
   LayoutAnimation,
   Platform,
@@ -26,9 +27,12 @@ import { PriceEntry, PriceInsight } from '../../src/domain/prices';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { usePrices } from '../../src/hooks/usePrices';
 import { useProducts } from '../../src/hooks/useProducts';
+import { useSession } from '../../src/hooks/useSession';
 import { useShoppingList } from '../../src/hooks/useShoppingList';
+import { useShoppingStorePreference } from '../../src/hooks/useShoppingStorePreference';
 import { useStores } from '../../src/hooks/useStores';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
+import { useTabBarHeight } from '../../src/state/tabBarHeight.store';
 import { tokens } from '../../src/theme/tokens';
 
 type ComparisonFamily = 'weight' | 'volume' | 'unit' | 'unknown';
@@ -116,13 +120,15 @@ function formatUnitPrice(cents: number, quantity: number | null, unit: string | 
 
 export default function ListScreen() {
   const router = useRouter();
+  const { user } = useSession();
+  const tabBarHeight = useTabBarHeight();
   const { activeHouseholdId } = useActiveHousehold();
-  const { products, refresh: refreshProducts } = useProducts(activeHouseholdId);
-  const { stores, refresh: refreshStores } = useStores(activeHouseholdId);
-  const { latestByProductId, insightsByProductId, refresh: refreshPrices } = usePrices(activeHouseholdId);
+  const { products, loading: productsLoading, refresh: refreshProducts } = useProducts(activeHouseholdId);
+  const { stores, loading: storesLoading, refresh: refreshStores } = useStores(activeHouseholdId);
+  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: refreshPrices } = usePrices(activeHouseholdId);
   const {
     items,
-    loading,
+    loading: shoppingLoading,
     error,
     addTextItem,
     addProductItem,
@@ -134,6 +140,9 @@ export default function ListScreen() {
 
   const priceLatestMap = latestByProductId as Record<string, PriceEntry>;
   const priceInsightsMap = insightsByProductId as Record<string, PriceInsight>;
+  const [hasInitialLoadCompleted, setHasInitialLoadCompleted] = useState(false);
+  const isAnyListDataLoading = productsLoading || storesLoading || pricesLoading || shoppingLoading;
+  const isBootstrapping = Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyListDataLoading;
 
   const inputRef = useRef<TextInput>(null);
   const selectingSuggestionRef = useRef(false);
@@ -147,8 +156,21 @@ export default function ListScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null);
   const [openMenuAnchor, setOpenMenuAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [isShoppingModeActive, setIsShoppingModeActive] = useState(false);
-  const [selectedShoppingStoreId, setSelectedShoppingStoreId] = useState<string | null>(null);
+  const listBottomInset = Math.max(24, Math.round(tabBarHeight * 0.45));
+
+  useEffect(() => {
+    setHasInitialLoadCompleted(false);
+  }, [activeHouseholdId]);
+
+  useEffect(() => {
+    if (!activeHouseholdId) {
+      return;
+    }
+
+    if (!isAnyListDataLoading) {
+      setHasInitialLoadCompleted(true);
+    }
+  }, [activeHouseholdId, isAnyListDataLoading]);
 
   useEffect(() => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -177,12 +199,14 @@ export default function ListScreen() {
     () => [...stores].sort((left, right) => left.name.localeCompare(right.name)),
     [stores]
   );
+  const hasStores = sortedStores.length > 0;
 
-  useEffect(() => {
-    if (selectedShoppingStoreId && !sortedStores.some((store) => store.id === selectedShoppingStoreId)) {
-      setSelectedShoppingStoreId(null);
-    }
-  }, [selectedShoppingStoreId, sortedStores]);
+  const { selectedStoreId: selectedShoppingStoreId, setSelectedStoreId: setSelectedShoppingStoreId, isEnabled: isShoppingModeActive, setIsEnabled: setIsShoppingModeActive } =
+    useShoppingStorePreference({
+    userId: user?.id ?? null,
+    householdId: activeHouseholdId,
+    availableStoreIds: sortedStores.map((store) => store.id),
+    });
 
   const productInfoById = useMemo(() => {
     const map: Record<string, { quantity: number | null; unit: string | null }> = {};
@@ -329,7 +353,6 @@ export default function ListScreen() {
         const insight = priceInsightsMap[product.id];
         const latestEntry = insight?.latest ?? priceLatestMap[product.id] ?? null;
         const cheapestEntry = insight?.cheapest ?? latestEntry;
-        const latestPrice = latestEntry ? latestEntry.price_cents : null;
         const cheapestPrice = cheapestEntry ? cheapestEntry.price_cents : null;
         const latestMeasure = getEffectiveMeasure(latestEntry, { quantity: product.quantity, unit: product.unit });
         const cheapestMeasure = getEffectiveMeasure(cheapestEntry, { quantity: product.quantity, unit: product.unit });
@@ -338,11 +361,9 @@ export default function ListScreen() {
         const latestUnitPrice = latestEntry && latestReferenceQuantity ? latestEntry.price_cents / latestReferenceQuantity : null;
         const cheapestUnitPrice = cheapestEntry && cheapestReferenceQuantity ? cheapestEntry.price_cents / cheapestReferenceQuantity : null;
         const comparisonFamily = getComparisonFamily(latestMeasure.unit ?? cheapestMeasure.unit ?? product.unit);
-        const comparisonLabel = latestEntry
-          ? formatUnitPrice(latestEntry.price_cents, latestMeasure.quantity, latestMeasure.unit)
-          : cheapestEntry
-            ? formatUnitPrice(cheapestEntry.price_cents, cheapestMeasure.quantity, cheapestMeasure.unit)
-            : null;
+        const comparisonLabel = cheapestEntry
+          ? formatUnitPrice(cheapestEntry.price_cents, cheapestMeasure.quantity, cheapestMeasure.unit)
+          : null;
         const hasCheaperAlternative = Boolean(
           insight?.latest && insight?.cheapest && insight.cheapest.price_cents < insight.latest.price_cents
         );
@@ -351,8 +372,8 @@ export default function ListScreen() {
           id: product.id,
           name: product.name,
           comparisonFamily,
-          latestPrice,
-          latestStoreName: latestEntry ? storeNameById[latestEntry.store_id] ?? 'Tienda' : null,
+          latestPrice: cheapestPrice,
+          latestStoreName: cheapestEntry ? storeNameById[cheapestEntry.store_id] ?? 'Tienda' : null,
           cheapestPrice,
           hasCheaperAlternative,
           rankUnitPrice: cheapestUnitPrice ?? latestUnitPrice,
@@ -651,6 +672,8 @@ export default function ListScreen() {
       params: {
         productId: item.product_id,
         sourceShoppingItemId: item.id,
+        sourceShoppingItemChecked: item.is_checked ? 'true' : 'false',
+        shoppingModeActive: isShoppingModeActive ? 'true' : 'false',
         returnTo: '/(tabs)/list',
         selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
       },
@@ -665,6 +688,8 @@ export default function ListScreen() {
       params: {
         name: item.text,
         sourceShoppingItemId: item.id,
+        sourceShoppingItemChecked: item.is_checked ? 'true' : 'false',
+        shoppingModeActive: isShoppingModeActive ? 'true' : 'false',
         selectedStoreId: isShoppingModeActive && selectedShoppingStoreId ? selectedShoppingStoreId : '',
       },
     });
@@ -691,6 +716,29 @@ export default function ListScreen() {
     );
   }
 
+  if (isBootstrapping) {
+    return (
+      <Screen scrollable includeBottomSafeArea={false}>
+        <SwipeTabs style={styles.page}>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroEyebrow}>LISTO</Text>
+              <Text style={styles.heroTitle}>Lista</Text>
+              <Text style={styles.heroSubtitle}>Organiza la compra y avanza sin perder el ritmo.</Text>
+            </View>
+            <View style={styles.heroOrbPrimary} />
+            <View style={styles.heroOrbSecondary} />
+          </View>
+
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={tokens.colors.primaryDark} />
+            <Text style={styles.loadingText}>Cargando la lista…</Text>
+          </View>
+        </SwipeTabs>
+      </Screen>
+    );
+  }
+
   return (
     <Screen scrollable includeBottomSafeArea={false}>
       <TouchableWithoutFeedback onPress={closeSearchSurface} accessible={false}>
@@ -699,23 +747,27 @@ export default function ListScreen() {
             <View style={styles.heroContent}>
               <Text style={styles.heroEyebrow}>LISTO</Text>
               <Text style={styles.heroTitle}>Lista</Text>
-              <Text style={styles.heroSubtitle}>Añade y marca.</Text>
+              <Text style={styles.heroSubtitle}>Organiza la compra y avanza sin perder el ritmo.</Text>
             </View>
             <View style={styles.heroOrbPrimary} />
             <View style={styles.heroOrbSecondary} />
           </View>
 
-          <View style={styles.shoppingModeSection}>
-            <ShoppingModeControl
-              stores={sortedStores}
-              enabled={isShoppingModeActive}
-              selectedStoreId={selectedShoppingStoreId}
-              onToggleEnabled={() => setIsShoppingModeActive((current) => !current)}
-              onSelectStore={setSelectedShoppingStoreId}
-            />
-          </View>
+          {hasStores ? (
+            <View style={styles.shoppingModeSectionWithStores}>
+              <ShoppingModeControl
+                stores={sortedStores}
+                enabled={isShoppingModeActive}
+                selectedStoreId={selectedShoppingStoreId}
+                onToggleEnabled={() => setIsShoppingModeActive(!isShoppingModeActive)}
+                onSelectStore={setSelectedShoppingStoreId}
+              />
+            </View>
+          ) : (
+            <View style={styles.shoppingModeSection}>{null}</View>
+          )}
 
-          <View style={styles.contentStack}>
+          <View style={[styles.contentStack, hasStores && styles.contentStackWithStores, { paddingBottom: listBottomInset }]}>
             {error ? (
               <View style={styles.errorCard}>
                 <View style={styles.errorRail} />
@@ -725,7 +777,7 @@ export default function ListScreen() {
 
             <AddItemBlock
               query={query}
-              loading={loading}
+              loading={shoppingLoading}
               isSubmitting={isSubmitting}
               inputRef={inputRef}
               suggestions={filteredProducts}
@@ -754,7 +806,7 @@ export default function ListScreen() {
               groups={pendingGroups}
               totalCount={pendingItems.length}
               empty={pendingItems.length === 0}
-              loading={loading}
+              loading={shoppingLoading}
               menuOpenItemId={openMenuItemId}
               menuAnchor={openMenuAnchor}
               animationsByItemId={rowAnimationsRef.current}
@@ -805,6 +857,21 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginTop: -8,
+    backgroundColor: tokens.colors.background,
+  },
+  loadingText: {
+    color: tokens.colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
   },
   heroHeader: {
     position: 'relative',
@@ -856,18 +923,29 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
   contentStack: {
-    marginTop: -8,
-    paddingHorizontal: 20,
+    marginTop: -18,
+    paddingHorizontal: 18,
     paddingBottom: 0,
-    gap: 10,
+    gap: 8,
   },
   shoppingModeSection: {
     position: 'relative',
     zIndex: 30,
     elevation: 8,
-    paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 12,
+    paddingHorizontal: 18,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  shoppingModeSectionWithStores: {
+    position: 'relative',
+    zIndex: 34,
+    elevation: 10,
+    paddingHorizontal: 18,
+    marginTop: -10,
+    marginBottom: 16,
+  },
+  contentStackWithStores: {
+    marginTop: 0,
   },
   errorCard: {
     flexDirection: 'row',

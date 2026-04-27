@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
@@ -22,13 +23,14 @@ import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
 import { attachProductToItem } from '../../src/services/shoppingList.service';
+import { clearProductEditorDraft, peekProductEditorDraft, saveProductEditorDraft } from '../../src/state/storeCreationDrafts.store';
 
 type ProductFormState = {
   name: string;
   brand: string;
   quantity: string;
   unit: ProductUnit | '';
-  category: ProductCategoryValue;
+  category: ProductCategoryValue | '';
 };
 
 type InitialPriceFormState = {
@@ -48,7 +50,7 @@ const emptyForm = (): ProductFormState => ({
   brand: '',
   quantity: '',
   unit: '',
-  category: DEFAULT_PRODUCT_CATEGORY,
+  category: '',
 });
 
 const emptyInitialPriceForm = (): InitialPriceFormState => ({
@@ -124,6 +126,7 @@ function DropdownSelect<T extends string>({
   onToggle,
   onChange,
   setOpenField,
+  footerAction,
 }: {
   label: string;
   placeholder: string;
@@ -134,6 +137,7 @@ function DropdownSelect<T extends string>({
   onToggle: () => void;
   onChange: (value: T) => void;
   setOpenField: (value: DropdownField) => void;
+  footerAction?: { label: string; onPress: () => void };
 }) {
   const selectedLabel = options.find((option) => option.value === value)?.label ?? (value === DEFAULT_PRODUCT_CATEGORY ? DEFAULT_PRODUCT_CATEGORY : undefined);
   const triggerRef = useRef<View>(null);
@@ -196,6 +200,19 @@ function DropdownSelect<T extends string>({
                   </Pressable>
                 );
               })}
+
+              {footerAction ? (
+                <View style={styles.dropdownFooter}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={footerAction.onPress}
+                    style={({ pressed }) => [styles.dropdownFooterButton, pressed && styles.dropdownFooterButtonPressed]}
+                  >
+                    <Text style={styles.dropdownFooterButtonIcon}>＋</Text>
+                    <Text style={styles.dropdownFooterButtonText}>{footerAction.label}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </ScrollView>
           </View>
         </Pressable>
@@ -210,7 +227,7 @@ function toFormState(product: Product): ProductFormState {
     brand: product.brand ?? '',
     quantity: product.quantity === null ? '' : String(product.quantity),
     unit: product.unit ?? '',
-    category: normalizeProductCategory(product.category),
+    category: product.category && product.category !== DEFAULT_PRODUCT_CATEGORY ? normalizeProductCategory(product.category) : '',
   };
 }
 
@@ -218,23 +235,58 @@ export default function ProductEditorModal() {
   const router = useRouter();
   const { activeHouseholdId } = useActiveHousehold();
   const { products, loading: productsLoading, createProduct, updateProduct } = useProducts(activeHouseholdId);
-  const { stores, loading: storesLoading } = useStores(activeHouseholdId);
+  const { stores, loading: storesLoading, refresh: refreshStores } = useStores(activeHouseholdId);
   const { addPrice: createPrice } = usePrices(activeHouseholdId);
-  const params = useLocalSearchParams<{ productId?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    productId?: string | string[];
+    name?: string | string[];
+    selectedStoreId?: string | string[];
+    sourceShoppingItemId?: string | string[];
+    sourceShoppingItemChecked?: string | string[];
+    shoppingModeActive?: string | string[];
+  }>();
   const productId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
   const prefillNameParam = Array.isArray(params.name) ? params.name[0] : params.name;
   const selectedStoreIdFromRoute = Array.isArray(params.selectedStoreId) ? params.selectedStoreId[0] : params.selectedStoreId;
   const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId)
     ? params.sourceShoppingItemId[0]
     : params.sourceShoppingItemId;
-  const canMarkAsBought = Boolean(sourceShoppingItemId);
+  const sourceShoppingItemChecked = Array.isArray(params.sourceShoppingItemChecked)
+    ? params.sourceShoppingItemChecked[0]
+    : params.sourceShoppingItemChecked;
+  const shoppingModeActive = Array.isArray(params.shoppingModeActive) ? params.shoppingModeActive[0] : params.shoppingModeActive;
   const isEditing = Boolean(productId);
-  const [form, setForm] = useState<ProductFormState>(emptyForm());
-  const [initialPriceForm, setInitialPriceForm] = useState<InitialPriceFormState>(emptyInitialPriceForm());
-  const [includeInitialPrice, setIncludeInitialPrice] = useState(false);
-  const [markAsBought, setMarkAsBought] = useState(false);
+  const draft = peekProductEditorDraft();
+  const [sourceItemId, setSourceItemId] = useState<string | null>(() => sourceShoppingItemId ?? draft?.sourceShoppingItemId ?? null);
+  const [sourceItemWasAlreadyBought, setSourceItemWasAlreadyBought] = useState(() => {
+    if (draft?.sourceShoppingItemChecked !== undefined) return draft.sourceShoppingItemChecked;
+    return sourceShoppingItemChecked === 'true';
+  });
+  const canMarkAsBought = Boolean(sourceItemId) && !sourceItemWasAlreadyBought;
+  const [form, setForm] = useState<ProductFormState>(() =>
+    draft
+      ? {
+          name: draft.name,
+          brand: draft.brand,
+          quantity: draft.quantity,
+          unit: draft.unit,
+          category: draft.category,
+        }
+      : emptyForm()
+  );
+  const [initialPriceForm, setInitialPriceForm] = useState<InitialPriceFormState>(() =>
+    draft
+      ? {
+          storeId: selectedStoreIdFromRoute?.trim() ? selectedStoreIdFromRoute : draft.initialPriceStoreId,
+          price: draft.initialPrice,
+        }
+      : emptyInitialPriceForm()
+  );
+  const [includeInitialPrice, setIncludeInitialPrice] = useState(() => Boolean(draft?.includeInitialPrice));
+  const [markAsBought, setMarkAsBought] = useState(() => draft?.markAsBought ?? false);
   const [saving, setSaving] = useState(false);
   const [hasLoadedProducts, setHasLoadedProducts] = useState(false);
+  const [hasAppliedInitialPriceDefault, setHasAppliedInitialPriceDefault] = useState(false);
   const [openField, setOpenField] = useState<DropdownField>(null);
   const productQuantity = useMemo(() => parseQuantity(form.quantity), [form.quantity]);
   const productReferenceUnit = useMemo(() => getReferenceUnit(form.unit), [form.unit]);
@@ -258,13 +310,21 @@ export default function ProductEditorModal() {
   }, [productId, products]);
 
   useEffect(() => {
+    if (draft) {
+      setSourceItemId(draft.sourceShoppingItemId ?? null);
+      setSourceItemWasAlreadyBought(draft.sourceShoppingItemChecked ?? false);
+      setHasAppliedInitialPriceDefault(true);
+      return;
+    }
+
     if (!isEditing) {
+      setSourceItemId(sourceShoppingItemId ?? null);
+      setSourceItemWasAlreadyBought(sourceShoppingItemChecked === 'true');
       setForm((current) => ({
         ...emptyForm(),
         name: prefillNameParam?.trim() ? prefillNameParam : current.name,
       }));
-      setIncludeInitialPrice(false);
-      setMarkAsBought(false);
+      setMarkAsBought(shoppingModeActive === 'true');
       setInitialPriceForm({
         ...emptyInitialPriceForm(),
         storeId: selectedStoreIdFromRoute?.trim() ? selectedStoreIdFromRoute : null,
@@ -275,13 +335,42 @@ export default function ProductEditorModal() {
     if (selectedProduct) {
       setForm(toFormState(selectedProduct));
     }
-  }, [isEditing, prefillNameParam, selectedProduct, selectedStoreIdFromRoute]);
+  }, [draft, isEditing, prefillNameParam, selectedProduct, selectedStoreIdFromRoute, shoppingModeActive, sourceShoppingItemChecked, sourceShoppingItemId]);
 
   useEffect(() => {
     if (productsLoading) {
       setHasLoadedProducts(true);
     }
   }, [productsLoading]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshStores();
+
+      const currentDraft = peekProductEditorDraft();
+
+      if (!currentDraft || isEditing) {
+        return;
+      }
+
+      setForm({
+        name: currentDraft.name,
+        brand: currentDraft.brand,
+        quantity: currentDraft.quantity,
+        unit: currentDraft.unit,
+        category: currentDraft.category,
+      });
+      setInitialPriceForm({
+        storeId: currentDraft.initialPriceStoreId,
+        price: currentDraft.initialPrice,
+      });
+      setSourceItemId(currentDraft.sourceShoppingItemId ?? null);
+      setIncludeInitialPrice(currentDraft.includeInitialPrice);
+      setMarkAsBought(currentDraft.markAsBought);
+      setHasAppliedInitialPriceDefault(true);
+      setOpenField(null);
+    }, [isEditing, refreshStores])
+  );
 
   const handleSave = async () => {
     if (!activeHouseholdId) {
@@ -302,9 +391,10 @@ export default function ProductEditorModal() {
       return;
     }
 
-    if (!form.category) {
+    const quantity = parseQuantity(form.quantity);
+    if (!quantity || quantity <= 0) {
       void hapticError();
-      Alert.alert('Categoría requerida', 'Selecciona una categoría para el producto.');
+      Alert.alert('Cantidad requerida', 'Introduce una cantidad válida para el producto.');
       return;
     }
 
@@ -327,8 +417,6 @@ export default function ProductEditorModal() {
 
     setSaving(true);
     try {
-      const quantity = parseQuantity(form.quantity);
-
       if (isEditing) {
         if (!productId) {
           throw new Error('No se pudo identificar el producto a editar');
@@ -340,7 +428,7 @@ export default function ProductEditorModal() {
           brand: form.brand.trim() || null,
           quantity,
           unit: form.unit,
-          category: form.category,
+          category: form.category || null,
         });
       } else {
         const createdProduct = await createProduct({
@@ -348,7 +436,7 @@ export default function ProductEditorModal() {
           brand: form.brand.trim() || null,
           quantity,
           unit: form.unit,
-          category: form.category,
+          category: form.category || null,
         });
 
         if (shouldCreateInitialPrice) {
@@ -363,9 +451,9 @@ export default function ProductEditorModal() {
           });
         }
 
-        if (sourceShoppingItemId) {
+        if (sourceItemId) {
           await attachProductToItem({
-            itemId: sourceShoppingItemId,
+            itemId: sourceItemId,
             productId: createdProduct.id,
             text: createdProduct.name,
             markAsChecked: markAsBought,
@@ -374,6 +462,13 @@ export default function ProductEditorModal() {
       }
 
       void hapticSuccess();
+
+      clearProductEditorDraft();
+
+      if (draft?.finalReturnTo) {
+        router.replace(draft.finalReturnTo);
+        return;
+      }
 
       router.back();
     } catch (err) {
@@ -397,6 +492,55 @@ export default function ProductEditorModal() {
     [stores]
   );
 
+  useEffect(() => {
+    if (draft || isEditing || hasAppliedInitialPriceDefault || storesLoading) {
+      return;
+    }
+
+    setIncludeInitialPrice(sortedStores.length > 0);
+    setHasAppliedInitialPriceDefault(true);
+  }, [draft, hasAppliedInitialPriceDefault, isEditing, sortedStores.length, storesLoading]);
+
+  const createStoreRoute = useMemo(
+    () => ({
+      pathname: '/modals/store-editor' as const,
+      params: {
+        returnTo: '/modals/product-editor',
+        sourceShoppingItemId: sourceItemId ?? '',
+        sourceShoppingItemChecked: sourceItemWasAlreadyBought ? 'true' : 'false',
+        shoppingModeActive: shoppingModeActive === 'true' ? 'true' : 'false',
+      },
+    }),
+    [shoppingModeActive, sourceItemId, sourceItemWasAlreadyBought]
+  );
+
+  const handleCreateStore = () => {
+    const finalReturnTo = sourceItemId ? '/(tabs)/list' : '/(tabs)/products';
+
+    saveProductEditorDraft({
+      name: form.name,
+      brand: form.brand,
+      quantity: form.quantity,
+      unit: form.unit,
+      category: form.category,
+      includeInitialPrice,
+      initialPriceStoreId: initialPriceForm.storeId,
+      initialPrice: initialPriceForm.price,
+      shoppingModeActive: shoppingModeActive === 'true',
+      markAsBought,
+      sourceShoppingItemId: sourceItemId,
+      sourceShoppingItemChecked: sourceItemWasAlreadyBought,
+      finalReturnTo,
+    });
+
+    router.push(createStoreRoute);
+  };
+
+  const handleCancel = () => {
+    clearProductEditorDraft();
+    router.back();
+  };
+
   if (!activeHouseholdId) {
     return (
       <Screen scrollable>
@@ -405,7 +549,7 @@ export default function ProductEditorModal() {
             title="Falta hogar activo"
             subtitle="Selecciona un hogar para crear o editar productos."
             actionLabel="Cerrar"
-            onAction={() => router.back()}
+            onAction={handleCancel}
           />
         </SectionCard>
       </Screen>
@@ -421,7 +565,7 @@ export default function ProductEditorModal() {
               title="Cargando producto"
               subtitle="Preparando los datos para editar."
               actionLabel="Cerrar"
-              onAction={() => router.back()}
+              onAction={handleCancel}
             />
           </SectionCard>
         </Screen>
@@ -435,7 +579,7 @@ export default function ProductEditorModal() {
             title="Producto no encontrado"
             subtitle="No se pudo cargar el producto seleccionado."
             actionLabel="Cerrar"
-            onAction={() => router.back()}
+            onAction={handleCancel}
           />
         </SectionCard>
       </Screen>
@@ -447,22 +591,21 @@ export default function ProductEditorModal() {
       <SectionCard title={title} subtitle={subtitle}>
         <View style={styles.form}>
           <AppInput
-            label="Nombre"
+            label="Nombre *"
             placeholder="Ej. Leche entera"
             value={form.name}
             onChangeText={(text) => setForm((current) => ({ ...current, name: text }))}
           />
           <AppInput
             label="Marca (opcional)"
-            placeholder="Opcional"
+            placeholder="Sin marca"
             value={form.brand}
             onChangeText={(text) => setForm((current) => ({ ...current, brand: text }))}
           />
-          <Text style={styles.optionalHint}>Si no quieres asignar marca, puedes dejar este campo vacío.</Text>
           <View style={styles.quantityRow}>
             <View style={styles.quantityField}>
               <AppInput
-                label="Cantidad"
+                label="Cantidad *"
                 placeholder="Ej. 500"
                 value={form.quantity}
                 onChangeText={(text) => setForm((current) => ({ ...current, quantity: sanitizeQuantityInput(text) }))}
@@ -471,7 +614,7 @@ export default function ProductEditorModal() {
             </View>
             <View style={styles.unitField}>
               <DropdownSelect
-                label="Unidad"
+                label="Unidad *"
                 placeholder="Selecciona una unidad"
                 value={form.unit}
                 options={unitOptions}
@@ -488,7 +631,7 @@ export default function ProductEditorModal() {
           </View>
           <DropdownSelect
             label="Categoría (opcional)"
-            placeholder={DEFAULT_PRODUCT_CATEGORY}
+            placeholder="Sin categoría"
             value={form.category}
             options={PRODUCT_CATEGORY_OPTIONS}
             isOpen={openField === 'category'}
@@ -522,7 +665,6 @@ export default function ProductEditorModal() {
                 </View>
                 <View style={styles.priceToggleTextBlock}>
                   <Text style={styles.priceToggleTitle}>Registrar precio inicial</Text>
-                  <Text style={styles.priceToggleSubtitle}>Opcional. Actívalo para incluir tienda, precio y medida.</Text>
                 </View>
               </Pressable>
 
@@ -537,6 +679,13 @@ export default function ProductEditorModal() {
                       <Text style={styles.emptyPriceHintText}>
                         No hay tiendas creadas todavía. Puedes guardar el producto sin precio y añadirlo después.
                       </Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={handleCreateStore}
+                        style={({ pressed }) => [styles.emptyPriceHintLink, pressed && styles.emptyPriceHintLinkPressed]}
+                      >
+                        <Text style={styles.emptyPriceHintLinkText}>Crear tienda</Text>
+                      </Pressable>
                     </View>
                   ) : (
                     <>
@@ -553,6 +702,7 @@ export default function ProductEditorModal() {
                           setOpenField(null);
                         }}
                         setOpenField={setOpenField}
+                        footerAction={{ label: 'Crear tienda', onPress: handleCreateStore }}
                       />
 
                       <View style={styles.initialPriceRow}>
@@ -591,9 +741,9 @@ export default function ProductEditorModal() {
                 {markAsBought ? <Text style={styles.checkboxMark}>✓</Text> : null}
               </View>
               <View style={styles.shoppingToggleTextBlock}>
-                <Text style={styles.shoppingToggleTitle}>Marcar como comprado</Text>
+                <Text style={styles.shoppingToggleTitle}>Marcar como comprado en la lista</Text>
                 <Text style={styles.shoppingToggleSubtitle}>
-                  Úsalo si quieres cerrar este elemento de la lista al guardar el producto.
+                  Si lo activas, al guardar este producto quedará marcado como comprado en la lista de la compra.
                 </Text>
               </View>
             </Pressable>
@@ -607,7 +757,7 @@ export default function ProductEditorModal() {
               disabled={saving}
               fullWidth
             />
-            <SecondaryButton title="Cancelar" onPress={() => router.back()} fullWidth />
+            <SecondaryButton title="Cancelar" onPress={handleCancel} fullWidth />
           </View>
         </View>
       </SectionCard>
@@ -618,12 +768,6 @@ export default function ProductEditorModal() {
 const styles = StyleSheet.create({
   form: {
     gap: 12,
-  },
-  optionalHint: {
-    color: tokens.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: -6,
   },
   priceOptionalBlock: {
     gap: 10,
@@ -720,6 +864,23 @@ const styles = StyleSheet.create({
     color: tokens.colors.textMuted,
     fontSize: 12,
     lineHeight: 16,
+  },
+  emptyPriceHintLink: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    minHeight: 28,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    justifyContent: 'center',
+  },
+  emptyPriceHintLinkPressed: {
+    opacity: 0.7,
+  },
+  emptyPriceHintLinkText: {
+    color: tokens.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   loadingCard: {
     minHeight: 44,
@@ -841,6 +1002,38 @@ const styles = StyleSheet.create({
   },
   dropdownMenuContent: {
     paddingVertical: 4,
+  },
+  dropdownFooter: {
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 6,
+    marginTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F0',
+  },
+  dropdownFooterButton: {
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+  },
+  dropdownFooterButtonPressed: {
+    opacity: 0.82,
+  },
+  dropdownFooterButtonIcon: {
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  dropdownFooterButtonText: {
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '600',
   },
   dropdownItem: {
     minHeight: 44,

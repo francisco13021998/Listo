@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../src/components/Screen';
 import { EmptyState } from '../../src/components/EmptyState';
 import { SwipeTabs } from '../../src/components/SwipeTabs';
 import { PriceEntry } from '../../src/domain/prices';
 import { Product, ProductUnit } from '../../src/domain/product';
-import { CreateProductButtonBlock } from '../../src/components/products/CreateProductButtonBlock';
+import { CreateActionButtonBlock } from '../../src/components/CreateActionButtonBlock';
 import { ProductCard } from '../../src/components/products/ProductCard';
 import { ProductsHeader } from '../../src/components/products/ProductsHeader';
 import { ProductsSearchBlock } from '../../src/components/products/ProductsSearchBlock';
@@ -74,10 +75,27 @@ export default function ProductsScreen() {
   const router = useRouter();
   const { activeHouseholdId } = useActiveHousehold();
   const { products, loading, error, deleteProduct, refresh: productsRefresh } = useProducts(activeHouseholdId);
-  const { stores, refresh: storesRefresh } = useStores(activeHouseholdId);
-  const { latestByProductId, insightsByProductId, refresh: pricesRefresh } = usePrices(activeHouseholdId);
+  const { stores, loading: storesLoading, refresh: storesRefresh } = useStores(activeHouseholdId);
+  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: pricesRefresh } = usePrices(activeHouseholdId);
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuProductId, setOpenMenuProductId] = useState<string | null>(null);
+  const [hasInitialLoadCompleted, setHasInitialLoadCompleted] = useState(false);
+  const isAnyCatalogDataLoading = loading || storesLoading || pricesLoading;
+  const isBootstrapping = Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyCatalogDataLoading;
+
+  useEffect(() => {
+    setHasInitialLoadCompleted(false);
+  }, [activeHouseholdId]);
+
+  useEffect(() => {
+    if (!activeHouseholdId) {
+      return;
+    }
+
+    if (!isAnyCatalogDataLoading) {
+      setHasInitialLoadCompleted(true);
+    }
+  }, [activeHouseholdId, isAnyCatalogDataLoading]);
 
   useFocusEffect(
     useCallback(() => {
@@ -197,12 +215,27 @@ export default function ProductsScreen() {
     );
   }
 
+  if (isBootstrapping) {
+    return (
+      <Screen scrollable includeBottomSafeArea={false}>
+        <SwipeTabs style={styles.page}>
+          <ProductsHeader />
+
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={tokens.colors.primaryDark} />
+            <Text style={styles.loadingText}>Cargando productos...</Text>
+          </View>
+        </SwipeTabs>
+      </Screen>
+    );
+  }
+
   const hasProducts = products.length > 0;
 
   return (
     <Screen scrollable includeBottomSafeArea={false}>
       <SwipeTabs style={styles.page}>
-        <ProductsHeader loading={loading && hasProducts} />
+        <ProductsHeader />
 
         <View style={styles.contentStack}>
           {openMenuProductId ? <Pressable style={styles.menuScrim} onPress={closeMenu} /> : null}
@@ -211,7 +244,14 @@ export default function ProductsScreen() {
             <>
               <View style={styles.topActionsStack}>
                 <ProductsSearchBlock value={searchQuery} onChangeText={setSearchQuery} onClear={() => setSearchQuery('')} />
-                <CreateProductButtonBlock onPress={handleCreateProduct} />
+                <CreateActionButtonBlock
+                  title="Nuevo producto"
+                  subtitle="Añádelo a tu catálogo."
+                  icon="add"
+                  iconBackgroundColor="#EAF4ED"
+                  iconColor={tokens.colors.primaryDark}
+                  onPress={handleCreateProduct}
+                />
               </View>
 
               <View style={styles.catalogSection}>
@@ -275,16 +315,41 @@ export default function ProductsScreen() {
             </>
           ) : (
             <View style={styles.emptyStateCard}>
-              <View style={styles.topActionsStack}>
-                <ProductsSearchBlock value={searchQuery} onChangeText={setSearchQuery} onClear={() => setSearchQuery('')} />
-                <CreateProductButtonBlock onPress={handleCreateProduct} />
+              <View style={styles.productEmptyCard}>
+                <View style={styles.productEmptyBadge}>
+                  <Ionicons name="basket-outline" size={28} color={tokens.colors.primaryDark} />
+                </View>
+
+                <View style={styles.productEmptyTextBlock}>
+                  <Text style={styles.productEmptyTitle}>No hay productos todavía</Text>
+                  <Text style={styles.productEmptySubtitle}>
+                    Empieza tu catálogo con el primer producto{`\n`}
+                    y deja preparados tus precios{`\n`}
+                    para comparar después.
+                  </Text>
+                </View>
+
+                <View style={styles.productEmptyPills}>
+                  <View style={styles.productEmptyPill}>
+                    <Text style={styles.productEmptyPillText}>Organiza</Text>
+                  </View>
+                  <View style={styles.productEmptyPill}>
+                    <Text style={styles.productEmptyPillText}>Compara</Text>
+                  </View>
+                  <View style={styles.productEmptyPill}>
+                    <Text style={styles.productEmptyPillText}>Añade</Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={handleCreateProduct}
+                  style={({ pressed }) => [styles.productEmptyAction, pressed && styles.productEmptyActionPressed]}
+                >
+                  <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.productEmptyActionText}>Crear producto</Text>
+                </Pressable>
               </View>
-              <EmptyState
-                title="No hay productos todavía"
-                subtitle="Crea tu primer producto para empezar a organizar tu catálogo."
-                actionLabel="Nuevo producto"
-                onAction={handleCreateProduct}
-              />
             </View>
           )}
         </View>
@@ -305,7 +370,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+    marginTop: -8,
+    backgroundColor: tokens.colors.background,
+  },
+  loadingText: {
+    color: tokens.colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   contentStack: {
+    flex: 1,
     position: 'relative',
     marginTop: -18,
     paddingHorizontal: 20,
@@ -408,7 +488,82 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   emptyStateCard: {
+    flex: 1,
     minHeight: 320,
+    justifyContent: 'center',
     gap: 14,
+  },
+  productEmptyCard: {
+    flex: 1,
+    borderRadius: 28,
+    padding: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 18,
+  },
+  productEmptyBadge: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: tokens.colors.primaryDark,
+  },
+  productEmptyTextBlock: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  productEmptyTitle: {
+    color: tokens.colors.primaryDark,
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+  productEmptySubtitle: {
+    color: tokens.colors.primaryDark,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    maxWidth: 290,
+  },
+  productEmptyPills: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  productEmptyPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: tokens.colors.primarySoft,
+    borderWidth: 1,
+    borderColor: '#D7E8DD',
+  },
+  productEmptyPillText: {
+    color: tokens.colors.primaryDark,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  productEmptyAction: {
+    minHeight: 48,
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    backgroundColor: tokens.colors.primaryDark,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  productEmptyActionPressed: {
+    opacity: 0.93,
+  },
+  productEmptyActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

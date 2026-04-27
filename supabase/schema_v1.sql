@@ -292,6 +292,20 @@ drop policy if exists shopping_list_items_modify_member on public.shopping_list_
 create policy shopping_list_items_modify_member on public.shopping_list_items
   for all using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
 
+-- Realtime
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'shopping_list_items'
+  ) then
+    execute 'alter publication supabase_realtime add table public.shopping_list_items';
+  end if;
+end $$;
+
 -- RPC: create_household
 create or replace function public.create_household(p_name text, init_stores text[] default null)
 returns uuid

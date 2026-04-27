@@ -15,6 +15,7 @@ import { toggleItem } from '../../src/services/shoppingList.service';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
+import { consumePriceEditorDraft, savePriceEditorDraft } from '../../src/state/storeCreationDrafts.store';
 
 type StoreOption = {
   id: string;
@@ -23,6 +24,11 @@ type StoreOption = {
 
 type ProductUnit = 'g' | 'kg' | 'ml' | 'l' | 'u';
 
+type SelectOption<T extends string> = {
+  label: string;
+  value: T;
+};
+
 const unitOptions: Array<{ label: string; value: ProductUnit }> = [
   { label: 'g', value: 'g' },
   { label: 'kg', value: 'kg' },
@@ -30,6 +36,94 @@ const unitOptions: Array<{ label: string; value: ProductUnit }> = [
   { label: 'l', value: 'l' },
   { label: 'u', value: 'u' },
 ];
+
+function DropdownSelect<T extends string>({
+  label,
+  placeholder,
+  value,
+  options,
+  isOpen,
+  field,
+  onChange,
+  setOpenField,
+}: {
+  label: string;
+  placeholder: string;
+  value: T | '';
+  options: ReadonlyArray<SelectOption<T>>;
+  isOpen: boolean;
+  field: 'unit';
+  onChange: (value: T) => void;
+  setOpenField: (value: 'unit' | null) => void;
+}) {
+  const selectedLabel = options.find((option) => option.value === value)?.label;
+  const triggerRef = useRef<View>(null);
+  const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
+
+  const openMenu = () => {
+    triggerRef.current?.measureInWindow((x, y, width, height) => {
+      setAnchor({ x, y, width, height });
+      setOpenField(field);
+    });
+  };
+
+  const closeMenu = () => setOpenField(null);
+  const menuHeight = Math.min(260, options.length * 44 + 8);
+  const menuStyle = getFloatingMenuStyle(anchor, { menuWidth: anchor.width, menuHeight });
+
+  return (
+    <View style={styles.unitPickerWrap}>
+      <Text style={styles.label}>{label}</Text>
+      <View ref={triggerRef} collapsable={false}>
+        <Pressable onPress={openMenu} style={({ pressed }) => [styles.dropdownButton, pressed && styles.dropdownButtonPressed]}>
+          <Text style={[styles.dropdownButtonText, !value && styles.dropdownButtonPlaceholder]} numberOfLines={1}>
+            {selectedLabel ?? placeholder}
+          </Text>
+          <Text style={styles.dropdownChevron}>{isOpen ? '▴' : '▾'}</Text>
+        </Pressable>
+      </View>
+
+      <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeMenu} statusBarTranslucent>
+        <Pressable style={styles.dropdownBackdrop} onPress={closeMenu}>
+          <View
+            style={[
+              styles.dropdownMenu,
+              {
+                top: menuStyle.top,
+                left: menuStyle.left,
+                width: anchor.width,
+              },
+            ]}
+          >
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={styles.dropdownMenuContent}
+            >
+              {options.map((option) => {
+                const active = value === option.value;
+
+                return (
+                  <Pressable
+                    key={option.value}
+                    onPress={() => {
+                      onChange(option.value);
+                      closeMenu();
+                    }}
+                    style={({ pressed }) => [styles.dropdownItem, active && styles.dropdownItemActive, pressed && styles.dropdownItemPressed]}
+                  >
+                    <Text style={[styles.dropdownItemText, active && styles.dropdownItemTextActive]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
 
 function parseQuantity(value: string) {
   const normalized = value.trim().replace(',', '.');
@@ -69,6 +163,8 @@ export default function PriceEditorModal() {
     returnTo?: string | string[];
     selectedStoreId?: string | string[];
     sourceShoppingItemId?: string | string[];
+    sourceShoppingItemChecked?: string | string[];
+    shoppingModeActive?: string | string[];
     markAsBought?: string | string[];
   }>();
   const productId = Array.isArray(params.productId) ? params.productId[0] : params.productId;
@@ -76,17 +172,25 @@ export default function PriceEditorModal() {
   const returnTo = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const selectedStoreIdFromRoute = Array.isArray(params.selectedStoreId) ? params.selectedStoreId[0] : params.selectedStoreId;
   const sourceShoppingItemId = Array.isArray(params.sourceShoppingItemId) ? params.sourceShoppingItemId[0] : params.sourceShoppingItemId;
+  const sourceShoppingItemChecked = Array.isArray(params.sourceShoppingItemChecked)
+    ? params.sourceShoppingItemChecked[0]
+    : params.sourceShoppingItemChecked;
+  const shoppingModeActive = Array.isArray(params.shoppingModeActive) ? params.shoppingModeActive[0] : params.shoppingModeActive;
+  const [draft] = useState(() => consumePriceEditorDraft());
   const { activeHouseholdId } = useActiveHousehold();
   const { products } = useProducts(activeHouseholdId);
   const { stores, loading: storesLoading } = useStores(activeHouseholdId);
   const { addPrice, refresh: refreshPrices } = usePrices(activeHouseholdId);
-  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(() =>
+    selectedStoreIdFromRoute?.trim() ? selectedStoreIdFromRoute : draft?.selectedStoreId ?? null
+  );
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownAnchor, setDropdownAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  const [priceText, setPriceText] = useState('');
-  const [quantityText, setQuantityText] = useState('');
-  const [selectedUnit, setSelectedUnit] = useState<ProductUnit | ''>('');
-  const [markAsBought, setMarkAsBought] = useState(false);
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
+  const [priceText, setPriceText] = useState(() => draft?.priceText ?? '');
+  const [quantityText, setQuantityText] = useState(() => draft?.quantityText ?? '');
+  const [selectedUnit, setSelectedUnit] = useState<ProductUnit | ''>(() => draft?.selectedUnit ?? '');
+  const [markAsBought, setMarkAsBought] = useState(() => draft?.markAsBought ?? shoppingModeActive === 'true');
   const [saving, setSaving] = useState(false);
   const [hasLoadedStores, setHasLoadedStores] = useState(false);
   const [loadedPriceEntry, setLoadedPriceEntry] = useState(false);
@@ -122,9 +226,11 @@ export default function PriceEditorModal() {
         productId: productId ?? '',
         priceId: priceId ?? '',
         finalReturnTo: returnTo ?? '',
+        sourceShoppingItemId: sourceShoppingItemId ?? '',
+        sourceShoppingItemChecked: sourceShoppingItemChecked ?? '',
       },
     }),
-    [priceId, productId, returnTo]
+    [priceId, productId, returnTo, sourceShoppingItemChecked, sourceShoppingItemId]
   );
 
   const sortedStores = useMemo<StoreOption[]>(() => {
@@ -136,6 +242,20 @@ export default function PriceEditorModal() {
   const selectedStoreName = useMemo(() => {
     return sortedStores.find((store) => store.id === selectedStoreId)?.name ?? null;
   }, [selectedStoreId, sortedStores]);
+  const sourceItemWasAlreadyBought = sourceShoppingItemChecked === 'true';
+
+  useEffect(() => {
+    if (draft) {
+      return;
+    }
+
+    if (!sourceShoppingItemId) {
+      setMarkAsBought(false);
+      return;
+    }
+
+    setMarkAsBought(shoppingModeActive === 'true' && !sourceItemWasAlreadyBought);
+  }, [draft, shoppingModeActive, sourceItemWasAlreadyBought, sourceShoppingItemId]);
 
   useEffect(() => {
     if (!selectedStoreIdFromRoute || appliedStoreSelection.current) {
@@ -156,7 +276,7 @@ export default function PriceEditorModal() {
   }, [selectedStoreIdFromRoute, sortedStores, storesLoading]);
 
   useEffect(() => {
-    if (isEditingPrice) {
+    if (draft || isEditingPrice) {
       return;
     }
 
@@ -164,10 +284,10 @@ export default function PriceEditorModal() {
 
     setQuantityText(selectedProduct.quantity !== null && selectedProduct.quantity !== undefined ? String(selectedProduct.quantity) : '');
     setSelectedUnit(selectedProduct.unit ?? '');
-  }, [isEditingPrice, selectedProduct]);
+  }, [draft, isEditingPrice, selectedProduct]);
 
   useEffect(() => {
-    if (!isEditingPrice || !priceId || !activeHouseholdId) {
+    if (draft || !isEditingPrice || !priceId || !activeHouseholdId) {
       return;
     }
 
@@ -211,18 +331,29 @@ export default function PriceEditorModal() {
     return () => {
       cancelled = true;
     };
-  }, [activeHouseholdId, isEditingPrice, priceId, selectedProduct, selectedStoreIdFromRoute]);
+  }, [activeHouseholdId, draft, isEditingPrice, priceId, selectedProduct, selectedStoreIdFromRoute]);
+
+  const handleCreateStore = () => {
+    savePriceEditorDraft({
+      selectedStoreId,
+      priceText,
+      quantityText,
+      selectedUnit,
+      shoppingModeActive: shoppingModeActive === 'true',
+      markAsBought,
+      sourceShoppingItemId: sourceShoppingItemId ?? null,
+      sourceShoppingItemChecked: sourceItemWasAlreadyBought,
+    });
+
+    closeDropdown();
+    router.push(createStoreRoute);
+  };
 
   const openDropdown = () => {
     triggerRef.current?.measureInWindow((x, y, width, height) => {
       setDropdownAnchor({ x, y, width, height });
       setDropdownOpen(true);
     });
-  };
-
-  const handleCreateStore = () => {
-    closeDropdown();
-    router.push(createStoreRoute);
   };
 
   const closeDropdown = () => setDropdownOpen(false);
@@ -246,6 +377,12 @@ export default function PriceEditorModal() {
   }, [storesLoading]);
 
   const handleSave = async () => {
+    if (!activeHouseholdId) {
+      void hapticError();
+      Alert.alert('No hay hogar activo');
+      return;
+    }
+
     if (!selectedStoreId) {
       void hapticError();
       Alert.alert('Selecciona una tienda');
@@ -298,6 +435,16 @@ export default function PriceEditorModal() {
             pathname: returnTo,
             params: {
               storeId: selectedStoreId ?? selectedStoreIdFromRoute ?? '',
+            },
+          });
+          return;
+        }
+
+        if (returnTo === '/modals/product-prices') {
+          router.replace({
+            pathname: returnTo,
+            params: {
+              productId: productId ?? '',
             },
           });
           return;
@@ -371,7 +518,7 @@ export default function PriceEditorModal() {
               </Text>
 
               <View style={styles.emptyPanelActions}>
-                <PrimaryButton title="Crear tienda" onPress={() => router.push(createStoreRoute)} fullWidth />
+                <PrimaryButton title="Crear tienda" onPress={handleCreateStore} fullWidth />
                 <SecondaryButton title="Cerrar" onPress={() => router.back()} fullWidth />
               </View>
             </View>
@@ -390,7 +537,7 @@ export default function PriceEditorModal() {
         <View style={styles.form}>
           <View style={styles.storeBlock}>
             <View style={styles.sectionLabelRow}>
-              <Text style={styles.label}>Tienda</Text>
+              <Text style={styles.label}>Tienda *</Text>
               {selectedStoreName ? <Text style={styles.selectedHint}>{selectedStoreName}</Text> : null}
             </View>
 
@@ -467,15 +614,10 @@ export default function PriceEditorModal() {
                           <Pressable
                             accessibilityRole="button"
                             onPress={handleCreateStore}
-                            style={({ pressed }) => [styles.dropdownCreateButton, pressed && styles.dropdownItemPressed]}
+                            style={({ pressed }) => [styles.dropdownCreateButton, pressed && styles.dropdownCreateButtonPressed]}
                           >
-                            <View style={styles.dropdownCreateIcon}>
-                              <Text style={styles.dropdownCreateIconText}>＋</Text>
-                            </View>
-                            <View style={styles.dropdownCreateTextBlock}>
-                              <Text style={styles.dropdownCreateTitle}>Crear tienda</Text>
-                              <Text style={styles.dropdownCreateSubtitle}>Añade una nueva y vuelve a este precio.</Text>
-                            </View>
+                            <Text style={styles.dropdownCreateIconText}>＋</Text>
+                            <Text style={styles.dropdownCreateTitle}>Crear tienda</Text>
                           </Pressable>
                         </View>
                       </ScrollView>
@@ -506,33 +648,22 @@ export default function PriceEditorModal() {
               </View>
 
               <View style={styles.unitPickerWrap}>
-                <Text style={styles.label}>Unidad</Text>
-                <View style={styles.unitGrid}>
-                  {unitOptions.map((option) => {
-                    const active = selectedUnit === option.value;
-
-                    return (
-                      <Pressable
-                        key={option.value}
-                        accessibilityRole="button"
-                        onPress={() => setSelectedUnit(option.value)}
-                        style={({ pressed }) => [
-                          styles.unitChip,
-                          active && styles.unitChipActive,
-                          pressed && styles.unitChipPressed,
-                        ]}
-                      >
-                        <Text style={[styles.unitChipText, active && styles.unitChipTextActive]}>{option.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <DropdownSelect
+                  label="Unidad"
+                  placeholder="Selecciona una unidad"
+                  value={selectedUnit}
+                  options={unitOptions}
+                  isOpen={unitDropdownOpen}
+                  field="unit"
+                  onChange={(unit) => setSelectedUnit(unit)}
+                  setOpenField={(field) => setUnitDropdownOpen(Boolean(field))}
+                />
               </View>
             </View>
           </View>
 
           <View style={styles.fieldBlock}>
-            <Text style={styles.label}>Precio (€)</Text>
+            <Text style={styles.label}>Precio (€) *</Text>
             <TextInput
               style={styles.input}
               placeholder="Ej. 1.49"
@@ -554,7 +685,7 @@ export default function PriceEditorModal() {
             ) : null}
           </View>
 
-          {sourceShoppingItemId ? (
+          {sourceShoppingItemId && !sourceItemWasAlreadyBought ? (
             <Pressable
               accessibilityRole="checkbox"
               accessibilityState={{ checked: markAsBought }}
@@ -565,9 +696,9 @@ export default function PriceEditorModal() {
                 {markAsBought ? <Text style={styles.checkboxMark}>✓</Text> : null}
               </View>
               <View style={styles.shoppingToggleTextBlock}>
-                <Text style={styles.shoppingToggleTitle}>Marcar como comprado</Text>
+                <Text style={styles.shoppingToggleTitle}>Marcar como comprado en la lista</Text>
                 <Text style={styles.shoppingToggleSubtitle}>
-                  Marca este elemento como comprado al guardar el precio.
+                  Si lo activas, al guardar el precio este elemento quedará marcado como comprado en la lista de la compra.
                 </Text>
               </View>
             </Pressable>
@@ -694,37 +825,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
-  unitGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  unitChip: {
-    minWidth: 44,
-    minHeight: 38,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: tokens.colors.border,
-    backgroundColor: tokens.colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unitChipPressed: {
-    opacity: 0.92,
-  },
-  unitChipActive: {
-    borderColor: tokens.colors.primaryDark,
-    backgroundColor: tokens.colors.primarySoft,
-  },
-  unitChipText: {
-    color: tokens.colors.text,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  unitChipTextActive: {
-    color: tokens.colors.primaryDark,
-  },
   sectionLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -795,8 +895,11 @@ const styles = StyleSheet.create({
   },
   dropdownFooter: {
     paddingHorizontal: 8,
-    paddingTop: 4,
-    paddingBottom: 8,
+    paddingTop: 6,
+    paddingBottom: 4,
+    marginTop: 2,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F0',
   },
   dropdownItem: {
     minHeight: 52,
@@ -841,43 +944,28 @@ const styles = StyleSheet.create({
     color: tokens.colors.primaryDark,
   },
   dropdownCreateButton: {
-    minHeight: 62,
-    paddingHorizontal: tokens.spacing.md,
-    paddingVertical: tokens.spacing.sm,
-    borderRadius: tokens.radius.md,
-    backgroundColor: '#F8FBF8',
-    borderWidth: 1,
-    borderColor: '#CFEFD9',
+    minHeight: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
+    alignSelf: 'flex-start',
   },
-  dropdownCreateIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    backgroundColor: tokens.colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+  dropdownCreateButtonPressed: {
+    opacity: 0.9,
   },
   dropdownCreateIconText: {
-    color: tokens.colors.primaryDark,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  dropdownCreateTextBlock: {
-    flex: 1,
-    gap: 2,
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '700',
   },
   dropdownCreateTitle: {
-    color: tokens.colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  dropdownCreateSubtitle: {
-    color: tokens.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 16,
+    color: '#667085',
+    fontSize: 11,
+    fontWeight: '600',
   },
   loadingCard: {
     minHeight: 64,

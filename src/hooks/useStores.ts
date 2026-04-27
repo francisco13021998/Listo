@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { Store } from '../domain/store';
 import { createStore, deleteStore, listStores, updateStore } from '../services/store.service';
 
@@ -8,7 +8,7 @@ const noop = () => {
 
 export function useStores(householdId: string | null) {
   const [stores, setStores] = useState<Store[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(householdId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -57,7 +57,7 @@ export function useStores(householdId: string | null) {
     [refresh]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void refresh();
   }, [refresh]);
 

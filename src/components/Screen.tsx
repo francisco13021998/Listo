@@ -1,8 +1,8 @@
-import { PropsWithChildren, useEffect, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { PropsWithChildren } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tokens } from '../theme/tokens';
-import { useTabBarHeight } from '../state/tabBarHeight.store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ScreenProps extends PropsWithChildren {
   scrollable?: boolean;
@@ -10,36 +10,20 @@ interface ScreenProps extends PropsWithChildren {
 }
 
 export function Screen({ children, scrollable, includeBottomSafeArea = true }: ScreenProps) {
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const tabBarHeight = useTabBarHeight();
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  const keyboardGap = keyboardVisible ? 64 : 0;
-  const tabBarGap = tabBarHeight > 0 ? 24 : 0;
-  const bottomGap = Math.max(keyboardGap, tabBarGap);
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={includeBottomSafeArea ? ["top", "bottom", "left", "right"] : ["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={includeBottomSafeArea ? ["bottom", "left", "right"] : ["left", "right"]}>
+      <View pointerEvents="none" style={[styles.statusBarSpacer, { height: insets.top }]} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled
         keyboardVerticalOffset={0}
       >
         {scrollable ? (
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomGap }]}
+            contentContainerStyle={styles.scrollContent}
             style={styles.flex}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -47,7 +31,7 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
             {children}
           </ScrollView>
         ) : (
-          <View style={[styles.container, { paddingBottom: bottomGap }]}>{children}</View>
+          <View style={styles.container}>{children}</View>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -57,6 +41,9 @@ export function Screen({ children, scrollable, includeBottomSafeArea = true }: S
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
+    backgroundColor: tokens.colors.background,
+  },
+  statusBarSpacer: {
     backgroundColor: '#000000',
   },
   flex: {
@@ -73,6 +60,6 @@ const styles = StyleSheet.create({
     backgroundColor: tokens.colors.background,
     paddingHorizontal: tokens.spacing.lg,
     paddingTop: tokens.spacing.lg,
-    paddingBottom: 0,
+    paddingBottom: tokens.spacing.xl,
   },
 });

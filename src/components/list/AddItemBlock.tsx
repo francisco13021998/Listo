@@ -146,13 +146,18 @@ export function AddItemBlock({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 8,
     borderWidth: 1,
     borderColor: '#E7EDE8',
     zIndex: 12,
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   header: {
     gap: 2,

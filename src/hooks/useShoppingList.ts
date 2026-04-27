@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ShoppingListItem } from '../domain/shoppingList';
+import { supabase } from '../lib/supabase';
 import {
   addProductItem,
   addTextItem,
@@ -13,9 +14,15 @@ const noop = () => {
   // no-op
 };
 
+type ShoppingListChangePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: ShoppingListItem | null;
+  old: ShoppingListItem | null;
+};
+
 export function useShoppingList(householdId: string | null) {
   const [items, setItems] = useState<ShoppingListItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => Boolean(householdId));
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -34,6 +41,34 @@ export function useShoppingList(householdId: string | null) {
       setLoading(false);
     }
   }, [householdId]);
+
+  const applyRealtimeChange = useCallback((payload: ShoppingListChangePayload) => {
+    if (payload.eventType === 'INSERT' && payload.new) {
+      setItems((current) => {
+        if (current.some((item) => item.id === payload.new?.id)) {
+          return current.map((item) => (item.id === payload.new?.id ? payload.new! : item));
+        }
+
+        return [...current, payload.new!].sort((left, right) => {
+          if (left.created_at === right.created_at) {
+            return left.id.localeCompare(right.id);
+          }
+
+          return left.created_at.localeCompare(right.created_at);
+        });
+      });
+      return;
+    }
+
+    if (payload.eventType === 'UPDATE' && payload.new) {
+      setItems((current) => current.map((item) => (item.id === payload.new?.id ? payload.new! : item)));
+      return;
+    }
+
+    if (payload.eventType === 'DELETE' && payload.old) {
+      setItems((current) => current.filter((item) => item.id !== payload.old?.id));
+    }
+  }, []);
 
   const addText = useCallback(
     async (text: string) => {
@@ -81,6 +116,32 @@ export function useShoppingList(householdId: string | null) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!householdId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`shopping-list-items:${householdId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'shopping_list_items',
+          filter: `household_id=eq.${householdId}`,
+        },
+        (payload) => {
+          applyRealtimeChange(payload as unknown as ShoppingListChangePayload);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [applyRealtimeChange, householdId]);
 
   if (!householdId) {
     return {

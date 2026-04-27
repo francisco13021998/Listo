@@ -1,7 +1,7 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Keyboard, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { tokens } from '../theme/tokens';
 
 interface AuthLayoutProps {
@@ -15,26 +15,12 @@ interface AuthLayoutProps {
 }
 
 export function AuthLayout({ eyebrow, title, subtitle, cardTitle, cardSubtitle, footer, children }: AuthLayoutProps) {
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSubscription = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSubscription = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  const keyboardGap = keyboardVisible ? 64 : 0;
+  const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "bottom", "left", "right"]}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea} edges={["bottom", "left", "right"]}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" translucent={false} />
+      <View pointerEvents="none" style={[styles.statusBarSpacer, { height: insets.top }]} />
       <View style={styles.backgroundTop} />
       <View style={styles.backgroundGlowLarge} />
       <View style={styles.backgroundGlowSmall} />
@@ -42,12 +28,13 @@ export function AuthLayout({ eyebrow, title, subtitle, cardTitle, cardSubtitle, 
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        enabled
         keyboardVerticalOffset={0}
       >
         <ScrollView
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: styles.scrollContent.paddingBottom + keyboardGap }]}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
@@ -81,6 +68,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#EAF7EE',
+  },
+  statusBarSpacer: {
+    backgroundColor: '#000000',
   },
   flex: {
     flex: 1,

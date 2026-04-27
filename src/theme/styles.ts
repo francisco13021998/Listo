@@ -16,20 +16,20 @@ export const commonStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    color: tokens.colors.text,
     ...tokens.typography.title,
+    color: tokens.colors.text,
   },
   subtitle: {
-    color: tokens.colors.textMuted,
     ...tokens.typography.subtitle,
+    color: tokens.colors.textMuted,
   },
   body: {
-    color: tokens.colors.text,
     ...tokens.typography.body,
+    color: tokens.colors.text,
   },
   caption: {
-    color: tokens.colors.textMuted,
     ...tokens.typography.caption,
+    color: tokens.colors.textMuted,
   },
   card: {
     backgroundColor: tokens.colors.surface,

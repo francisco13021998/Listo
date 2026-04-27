@@ -28,21 +28,21 @@ export function StoreGroup({ title, count, subtle, children }: StoreGroupProps) 
 
 const styles = StyleSheet.create({
   group: {
-    gap: 8,
+    gap: 6,
   },
   groupSubtle: {
-    paddingTop: 2,
+    paddingTop: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 4,
+    gap: 7,
+    paddingHorizontal: 3,
     paddingBottom: 2,
   },
   iconWrap: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -54,19 +54,19 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     color: '#475467',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   count: {
     color: '#98A2B3',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   items: {
     gap: 0,
   },
   itemsShell: {
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#DCE6DE',
     backgroundColor: '#FFFFFF',

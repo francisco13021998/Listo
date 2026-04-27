@@ -1,18 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { tokens } from '../../theme/tokens';
 
-type ProductsHeaderProps = {
-  loading?: boolean;
-};
-
-export function ProductsHeader({ loading }: ProductsHeaderProps) {
+export function ProductsHeader() {
   return (
     <View style={styles.heroHeader}>
       <View style={styles.pageHeader}>
         <Text style={styles.heroEyebrow}>LISTO</Text>
         <Text style={styles.pageTitle}>Productos</Text>
-        <Text style={styles.pageSubtitle}>Tu catálogo para consultar precios y entrar al detalle de cada producto.</Text>
-        {loading ? <Text style={styles.loadingText}>Actualizando productos…</Text> : null}
+        <Text style={styles.pageSubtitle}>Consulta precios y detalles de producto.</Text>
       </View>
 
       <View style={styles.heroOrbPrimary} />
@@ -52,10 +47,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     fontWeight: '600',
-  },
-  loadingText: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
+    flexShrink: 1,
   },
   heroOrbPrimary: {
     position: 'absolute',

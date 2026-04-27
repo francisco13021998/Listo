@@ -67,7 +67,8 @@ export async function listStorePricedProducts(
   const map: Record<string, string> = {};
   for (const row of data ?? []) {
     const pid = row.product_id as string;
-    const pname = (row.products as { name: string } | null)?.name ?? 'Producto';
+    const product = Array.isArray(row.products) ? row.products[0] : row.products;
+    const pname = (product as { name: string } | null)?.name ?? 'Producto';
     if (!map[pid]) map[pid] = pname;
   }
 
