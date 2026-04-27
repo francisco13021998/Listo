@@ -37,16 +37,19 @@ export function useSession() {
     }
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session ?? null);
-      if (data.session?.user) {
-        void loadProfileUsername(data.session.user.id);
-        void syncUsernameFromAuth(
-          data.session.user.id,
-          data.session.user.user_metadata?.username ?? data.session.user.user_metadata?.display_name
-        );
+      try {
+        const { data } = await supabase.auth.getSession();
+        setSession(data.session ?? null);
+        if (data.session?.user) {
+          void loadProfileUsername(data.session.user.id);
+          void syncUsernameFromAuth(
+            data.session.user.id,
+            data.session.user.user_metadata?.username ?? data.session.user.user_metadata?.display_name
+          );
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     void init();

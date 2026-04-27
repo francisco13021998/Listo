@@ -38,14 +38,20 @@ export function ActiveHouseholdProvider({ children }: { children: React.ReactNod
     };
 
     const bootstrap = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (cancelled) {
-        return;
-      }
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) {
+          return;
+        }
 
-      const nextStorageKey = getStorageKey(data.session?.user?.id ?? null);
-      setStorageKey(nextStorageKey);
-      await loadForUser(nextStorageKey);
+        const nextStorageKey = getStorageKey(data.session?.user?.id ?? null);
+        setStorageKey(nextStorageKey);
+        await loadForUser(nextStorageKey);
+      } catch {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
+      }
     };
 
     void bootstrap();
