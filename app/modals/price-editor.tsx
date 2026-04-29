@@ -13,6 +13,7 @@ import { useStores } from '../../src/hooks/useStores';
 import { getPriceEntryById, updatePriceEntry } from '../../src/services/prices.service';
 import { toggleItem } from '../../src/services/shoppingList.service';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
+import { showGenericErrorAlert } from '../../src/lib/uiError';
 import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
 import { tokens } from '../../src/theme/tokens';
 import { consumePriceEditorDraft, savePriceEditorDraft } from '../../src/state/storeCreationDrafts.store';
@@ -457,7 +458,7 @@ export default function PriceEditorModal() {
       router.back();
     } catch (err) {
       void hapticError();
-      Alert.alert((err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setSaving(false);
     }

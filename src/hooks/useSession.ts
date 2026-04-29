@@ -9,11 +9,22 @@ async function syncUsernameFromAuth(userId: string, username: string | undefined
   }
 
   const { data, error } = await supabase.from('profiles').select('username').eq('id', userId).maybeSingle();
-  if (error || data?.username?.trim()) {
+  if (error) {
+    throw error;
+  }
+
+  if (data?.username?.trim()) {
     return;
   }
 
-  await supabase.from('profiles').update({ username: trimmedUsername, display_name: trimmedUsername }).eq('id', userId);
+  const { error: updateError } = await supabase
+    .from('profiles')
+    .update({ username: trimmedUsername, display_name: trimmedUsername })
+    .eq('id', userId);
+
+  if (updateError) {
+    throw updateError;
+  }
 }
 
 export function useSession() {
@@ -24,7 +35,7 @@ export function useSession() {
   const loadProfileUsername = async (userId: string) => {
     const { data, error } = await supabase.from('profiles').select('username').eq('id', userId).maybeSingle();
     if (error) {
-      return;
+      throw error;
     }
 
     setProfileUsername(data?.username?.trim() ?? null);
@@ -41,11 +52,11 @@ export function useSession() {
         const { data } = await supabase.auth.getSession();
         setSession(data.session ?? null);
         if (data.session?.user) {
-          void loadProfileUsername(data.session.user.id);
+          void loadProfileUsername(data.session.user.id).catch(() => undefined);
           void syncUsernameFromAuth(
             data.session.user.id,
             data.session.user.user_metadata?.username ?? data.session.user.user_metadata?.display_name
-          );
+          ).catch(() => undefined);
         }
       } finally {
         setLoading(false);
@@ -57,11 +68,11 @@ export function useSession() {
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       if (newSession?.user) {
-        void loadProfileUsername(newSession.user.id);
+        void loadProfileUsername(newSession.user.id).catch(() => undefined);
         void syncUsernameFromAuth(
           newSession.user.id,
           newSession.user.user_metadata?.username ?? newSession.user.user_metadata?.display_name
-        );
+        ).catch(() => undefined);
       } else {
         setProfileUsername(null);
       }

@@ -21,6 +21,7 @@ import {
 } from '../../src/domain/productCategories';
 import { hapticError, hapticSuccess } from '../../src/lib/haptics';
 import { getFloatingMenuStyle } from '../../src/lib/floatingMenu';
+import { showGenericErrorAlert } from '../../src/lib/uiError';
 import { tokens } from '../../src/theme/tokens';
 import { attachProductToItem } from '../../src/services/shoppingList.service';
 import { clearProductEditorDraft, peekProductEditorDraft, saveProductEditorDraft } from '../../src/state/storeCreationDrafts.store';
@@ -473,7 +474,7 @@ export default function ProductEditorModal() {
       router.back();
     } catch (err) {
       void hapticError();
-      Alert.alert('Error al guardar', (err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setSaving(false);
     }

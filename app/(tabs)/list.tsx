@@ -32,6 +32,7 @@ import { useShoppingList } from '../../src/hooks/useShoppingList';
 import { useShoppingStorePreference } from '../../src/hooks/useShoppingStorePreference';
 import { useStores } from '../../src/hooks/useStores';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
+import { showGenericErrorAlert } from '../../src/lib/uiError';
 import { useTabBarHeight } from '../../src/state/tabBarHeight.store';
 import { tokens } from '../../src/theme/tokens';
 
@@ -545,7 +546,7 @@ export default function ListScreen() {
     } catch (err) {
       selectingSuggestionRef.current = false;
       void hapticError();
-      Alert.alert('Error al añadir', (err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setIsSubmitting(false);
     }
@@ -571,7 +572,7 @@ export default function ListScreen() {
     } catch (err) {
       selectingSuggestionRef.current = false;
       void hapticError();
-      Alert.alert('Error al añadir', (err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setIsSubmitting(false);
     }

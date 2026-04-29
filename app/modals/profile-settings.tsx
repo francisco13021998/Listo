@@ -27,7 +27,8 @@ export default function ProfileSettingsModal() {
   const handleLogout = async () => {
     try {
       void hapticMedium();
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       router.replace('/(gate)');
     } catch (err) {
       Alert.alert('Error al cerrar sesión', (err as Error).message);

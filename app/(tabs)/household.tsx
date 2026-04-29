@@ -16,6 +16,7 @@ import { useHouseholds } from '../../src/hooks/useHouseholds';
 import { useShoppingList } from '../../src/hooks/useShoppingList';
 import { useSession } from '../../src/hooks/useSession';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
+import { showGenericErrorAlert } from '../../src/lib/uiError';
 import { tokens } from '../../src/theme/tokens';
 
 type AccessMode = 'create' | 'join';
@@ -197,7 +198,7 @@ export default function HouseholdScreen() {
       goToShoppingList();
     } catch (err) {
       void hapticError();
-      Alert.alert('No se pudo crear el hogar', (err as Error).message);
+      showGenericErrorAlert();
     }
   };
 
@@ -223,7 +224,7 @@ export default function HouseholdScreen() {
       goToShoppingList();
     } catch (err) {
       void hapticError();
-      Alert.alert('No se pudo entrar al hogar', (err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setJoiningCode(false);
     }
@@ -244,7 +245,7 @@ export default function HouseholdScreen() {
       void hapticSuccess();
     } catch (err) {
       void hapticError();
-      Alert.alert('Error al crear invitación', (err as Error).message);
+      showGenericErrorAlert();
     } finally {
       setInviteLoading(false);
     }

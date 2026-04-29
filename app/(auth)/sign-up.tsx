@@ -53,9 +53,11 @@ export default function SignUpScreen() {
       if (error) throw error;
 
       if (data.session?.user) {
-        await supabase
+        const { error: profileError } = await supabase
           .from('profiles')
           .upsert({ id: data.session.user.id, username: trimmedUsername, display_name: trimmedUsername });
+
+        if (profileError) throw profileError;
       }
 
       if (data.session) {
