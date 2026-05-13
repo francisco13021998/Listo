@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
@@ -14,9 +14,16 @@ import { formatHistoryDate, formatMeasure, formatPrice, formatUnitPrice } from '
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useProducts } from '../../src/hooks/useProducts';
 import { useStores } from '../../src/hooks/useStores';
+import { useSession } from '../../src/hooks/useSession';
 import { deleteSinglePriceEntry, listPriceHistoryForProductFiltered } from '../../src/services/prices.service';
 import { PriceEntry } from '../../src/domain/prices';
 import { getCategoryVisual } from '../../src/theme/visuals';
+
+function getUnitPriceCentsLocal(priceCents: number, quantity: number | null, unit: string | null): number | null {
+  if (!quantity || quantity <= 0 || !unit) return null;
+  const normalizedQty = unit === 'g' || unit === 'ml' ? quantity / 1000 : quantity;
+  return priceCents / normalizedQty;
+}
 
 type DialogState =
   | { type: 'delete-product' }
@@ -29,6 +36,7 @@ export default function ProductDetailScreen() {
   const { activeHouseholdId } = useActiveHousehold();
   const { products, refresh: refreshProducts, deleteProduct } = useProducts(activeHouseholdId);
   const { stores } = useStores(activeHouseholdId);
+  const { profileComparisonMode } = useSession();
   const [entries, setEntries] = useState<PriceEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,30 +133,46 @@ export default function ProductDetailScreen() {
 
   const sortedEntries = useMemo(() => {
     return [...entries].sort((left, right) => {
+      if (profileComparisonMode === 'unit_price') {
+        const leftUP = getUnitPriceCentsLocal(left.price_cents, left.quantity, left.unit);
+        const rightUP = getUnitPriceCentsLocal(right.price_cents, right.quantity, right.unit);
+        if (leftUP !== null && rightUP !== null) {
+          if (leftUP !== rightUP) return leftUP - rightUP;
+          return right.purchased_at.localeCompare(left.purchased_at);
+        }
+        // Entries without unit price go last
+        if (leftUP !== null) return -1;
+        if (rightUP !== null) return 1;
+      }
+
       if (left.price_cents !== right.price_cents) {
         return left.price_cents - right.price_cents;
       }
 
       return right.purchased_at.localeCompare(left.purchased_at);
     });
-  }, [entries]);
+  }, [entries, profileComparisonMode]);
 
-  const cheapestEntry = sortedEntries[0] ?? null;
   const cheapestOverall = useMemo(() => {
-    return sortedEntries.reduce<PriceEntry | null>((currentCheapest, entry) => {
-      if (!currentCheapest) return entry;
+    return sortedEntries.reduce<PriceEntry | null>((best, entry) => {
+      if (!best) return entry;
 
-      if (entry.price_cents < currentCheapest.price_cents) {
-        return entry;
+      if (profileComparisonMode === 'unit_price') {
+        const entryUP = getUnitPriceCentsLocal(entry.price_cents, entry.quantity, entry.unit);
+        const bestUP = getUnitPriceCentsLocal(best.price_cents, best.quantity, best.unit);
+        if (entryUP !== null && bestUP !== null) {
+          if (entryUP < bestUP) return entry;
+          if (entryUP === bestUP && entry.purchased_at > best.purchased_at) return entry;
+          return best;
+        }
       }
 
-      if (entry.price_cents === currentCheapest.price_cents && entry.purchased_at > currentCheapest.purchased_at) {
-        return entry;
-      }
-
-      return currentCheapest;
+      if (entry.price_cents < best.price_cents) return entry;
+      if (entry.price_cents === best.price_cents && entry.purchased_at > best.purchased_at) return entry;
+      return best;
     }, null);
-  }, [sortedEntries]);
+  }, [sortedEntries, profileComparisonMode]);
+  const cheapestEntry = cheapestOverall;
   const categoryVisual = getCategoryVisual(selectedProduct?.category ?? null);
   const productSummaryParts: string[] = [];
   const storeCount = useMemo(() => new Set(entries.map((entry) => entry.store_id)).size, [entries]);
@@ -260,9 +284,10 @@ export default function ProductDetailScreen() {
   if (!hasBootstrapped) {
     return (
       <Screen scrollable>
-        <SectionCard title="Detalle del producto" subtitle="Cargando información del producto y su histórico...">
-          <EmptyState title="Cargando" subtitle="Un momento, estamos preparando el detalle." actionLabel="Cerrar" onAction={() => router.back()} />
-        </SectionCard>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#1A3C2E" />
+          <Text style={styles.loadingText}>Cargando detalle…</Text>
+        </View>
       </Screen>
     );
   }
@@ -288,20 +313,20 @@ export default function ProductDetailScreen() {
         />
 
         <PriceHistorySection
-          entries={historyEntries}
-          loading={loading}
-          error={error}
-          storeCount={storeCount}
-          onAddPrice={() => {
-            if (!productId) return;
-            closeOverlays();
-            router.push({ pathname: '/modals/price-editor', params: { productId, returnTo: '/modals/product-prices' } });
-          }}
-          onOpenEntryMenu={(entryId, anchor) => {
-            setProductMenuOpen(false);
-            setOpenEntryMenuId(entryId);
-            setOpenEntryMenuAnchor(anchor);
-          }}
+            entries={historyEntries}
+            loading={loading}
+            error={error}
+            storeCount={storeCount}
+            onAddPrice={() => {
+              if (!productId) return;
+              closeOverlays();
+              router.push({ pathname: '/modals/price-editor', params: { productId, returnTo: '/modals/product-prices' } });
+            }}
+            onOpenEntryMenu={(entryId, anchor) => {
+              setProductMenuOpen(false);
+              setOpenEntryMenuId(entryId);
+              setOpenEntryMenuAnchor(anchor);
+            }}
         />
       </View>
 
@@ -362,6 +387,19 @@ export default function ProductDetailScreen() {
 
 const styles = StyleSheet.create({
   page: {
-    gap: 20,
+    gap: 16,
+    paddingBottom: 32,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: '#667085',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

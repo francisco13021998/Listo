@@ -48,6 +48,7 @@ export default function SignUpScreen() {
         password,
         options: {
           data: { username: trimmedUsername, display_name: trimmedUsername },
+          emailRedirectTo: 'listo://verified',
         },
       });
       if (error) throw error;

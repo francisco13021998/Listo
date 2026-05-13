@@ -8,6 +8,7 @@ type PendingItemRowProps = {
   item: ShoppingListItem;
   priceLabel: string | null;
   unitPriceLabel: string | null;
+  productMeta: { brandLabel: string | null; measureLabel: string | null } | null;
   menuOpen?: boolean;
   menuAnchor: { x: number; y: number } | null;
   showDivider?: boolean;
@@ -27,6 +28,7 @@ export function PendingItemRow({
   item,
   priceLabel,
   unitPriceLabel,
+  productMeta,
   menuOpen,
   menuAnchor,
   showDivider,
@@ -103,17 +105,35 @@ export function PendingItemRow({
         </Animated.View>
 
         <View style={styles.content}>
-          <Animated.Text style={[styles.title, { opacity: textOpacity }]} numberOfLines={2}>
-            {item.text}
-          </Animated.Text>
+          <View style={styles.titleRow}>
+            <Animated.Text style={[styles.title, { opacity: textOpacity }]} numberOfLines={1}>
+              {item.text}
+            </Animated.Text>
+
+            {productMeta?.brandLabel ? (
+              <Text style={styles.brandChip} numberOfLines={1}>
+                {productMeta.brandLabel}
+              </Text>
+            ) : null}
+          </View>
 
           {priceLabel ? (
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>{priceLabel}</Text>
-              {unitPriceLabel ? <Text style={styles.unitPriceLabel}>{unitPriceLabel}</Text> : null}
+              <View style={styles.priceMainLine}>
+                <Text style={styles.priceLabel}>{priceLabel}</Text>
+                {productMeta?.measureLabel ? (
+                  <Text style={styles.measureLabel} numberOfLines={1}>
+                    {productMeta.measureLabel}
+                  </Text>
+                ) : null}
+              </View>
+
+              {unitPriceLabel ? <Text style={styles.unitPricePill}>{unitPriceLabel}</Text> : null}
             </View>
           ) : (
-            <Text style={styles.missingPriceLabel}>Aún sin precio registrado</Text>
+            <Text style={styles.missingPriceLabel}>
+              {item.product_id ? 'Precio no añadido' : 'Producto no registrado'}
+            </Text>
           )}
         </View>
       </Pressable>
@@ -189,30 +209,67 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    gap: 2,
+    gap: 5,
     paddingTop: 0,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
+  },
   title: {
+    flex: 1,
     color: '#111827',
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700',
   },
+  brandChip: {
+    maxWidth: '42%',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#F2F4F7',
+    color: '#475467',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
   priceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  priceMainLine: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
   },
   priceLabel: {
-    color: '#111827',
+    color: tokens.colors.text,
     fontSize: 13,
     fontWeight: '800',
   },
-  unitPriceLabel: {
-    color: tokens.colors.primaryDark,
+  measureLabel: {
+    flexShrink: 1,
+    color: '#667085',
     fontSize: 12,
-    fontWeight: '700',
+    lineHeight: 15,
+    fontWeight: '600',
+  },
+  unitPricePill: {
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: '#EAF4ED',
+    color: tokens.colors.primaryDark,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
   },
   missingPriceLabel: {
     color: '#667B70',

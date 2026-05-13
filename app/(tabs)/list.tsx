@@ -32,7 +32,8 @@ import { useShoppingList } from '../../src/hooks/useShoppingList';
 import { useShoppingStorePreference } from '../../src/hooks/useShoppingStorePreference';
 import { useStores } from '../../src/hooks/useStores';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
-import { showGenericErrorAlert } from '../../src/lib/uiError';
+import { useNetworkStatus } from '../../src/hooks/useNetworkStatus';
+import { DEFAULT_ERROR_MESSAGE, DEFAULT_OFFLINE_MESSAGE, safeRequest } from '../../src/utils/safeRequest';
 import { useTabBarHeight } from '../../src/state/tabBarHeight.store';
 import { tokens } from '../../src/theme/tokens';
 
@@ -54,6 +55,11 @@ type SearchSuggestion = {
 type ShoppingItemViewModel = ShoppingListItem & {
   storeSortLabel: string;
   storeSortWeight: number;
+};
+
+type ProductMeta = {
+  brandLabel: string | null;
+  measureLabel: string | null;
 };
 
 type PendingGroup = {
@@ -121,12 +127,13 @@ function formatUnitPrice(cents: number, quantity: number | null, unit: string | 
 
 export default function ListScreen() {
   const router = useRouter();
-  const { user } = useSession();
+  const { user, loading: sessionLoading, profileComparisonMode, refreshProfile } = useSession();
   const tabBarHeight = useTabBarHeight();
-  const { activeHouseholdId } = useActiveHousehold();
+  const { activeHouseholdId, isHydrated } = useActiveHousehold();
+  const { isOffline } = useNetworkStatus();
   const { products, loading: productsLoading, refresh: refreshProducts } = useProducts(activeHouseholdId);
   const { stores, loading: storesLoading, refresh: refreshStores } = useStores(activeHouseholdId);
-  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: refreshPrices } = usePrices(activeHouseholdId);
+  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: refreshPrices } = usePrices(activeHouseholdId, profileComparisonMode);
   const {
     items,
     loading: shoppingLoading,
@@ -143,7 +150,7 @@ export default function ListScreen() {
   const priceInsightsMap = insightsByProductId as Record<string, PriceInsight>;
   const [hasInitialLoadCompleted, setHasInitialLoadCompleted] = useState(false);
   const isAnyListDataLoading = productsLoading || storesLoading || pricesLoading || shoppingLoading;
-  const isBootstrapping = Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyListDataLoading;
+  const isBootstrapping = sessionLoading || !isHydrated || (Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyListDataLoading);
 
   const inputRef = useRef<TextInput>(null);
   const selectingSuggestionRef = useRef(false);
@@ -158,6 +165,28 @@ export default function ListScreen() {
   const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null);
   const [openMenuAnchor, setOpenMenuAnchor] = useState<{ x: number; y: number } | null>(null);
   const listBottomInset = Math.max(24, Math.round(tabBarHeight * 0.45));
+  const [actionError, setActionError] = useState<string | null>(null);
+  const offlineMessage = isOffline ? DEFAULT_OFFLINE_MESSAGE : null;
+  const inlineError = offlineMessage ?? actionError ?? (error ? DEFAULT_ERROR_MESSAGE : null);
+
+  const runRequest = useCallback(
+    async (request: () => void | Promise<void>) => {
+      const result = await safeRequest(() => Promise.resolve(request()), {
+        isOffline,
+        offlineMessage: DEFAULT_OFFLINE_MESSAGE,
+        errorMessage: DEFAULT_ERROR_MESSAGE,
+      });
+
+      if (!result.ok) {
+        setActionError(result.message);
+        return false;
+      }
+
+      setActionError(null);
+      return true;
+    },
+    [isOffline]
+  );
 
   useEffect(() => {
     setHasInitialLoadCompleted(false);
@@ -181,11 +210,17 @@ export default function ListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void refreshProducts();
-      void refreshPrices();
-      void refreshStores();
-      void refreshShopping();
-    }, [refreshPrices, refreshProducts, refreshShopping, refreshStores])
+      if (isOffline) {
+        setActionError(DEFAULT_OFFLINE_MESSAGE);
+        return;
+      }
+
+      void refreshProfile();
+      void runRequest(refreshProducts);
+      void runRequest(refreshPrices);
+      void runRequest(refreshStores);
+      void runRequest(refreshShopping);
+    }, [isOffline, refreshPrices, refreshProducts, refreshShopping, refreshStores, runRequest, refreshProfile])
   );
 
   const storeNameById = useMemo(() => {
@@ -216,6 +251,23 @@ export default function ListScreen() {
     });
     return map;
   }, [products]);
+
+  const productMetaById = useMemo<Record<string, ProductMeta>>(() => {
+    const map: Record<string, ProductMeta> = {};
+
+    products.forEach((product) => {
+      const insight = priceInsightsMap[product.id];
+      const latest = insight?.cheapest ?? insight?.latest ?? null;
+      const effectiveMeasure = getEffectiveMeasure(latest, { quantity: product.quantity, unit: product.unit });
+
+      map[product.id] = {
+        brandLabel: product.brand?.trim() ? product.brand.trim() : null,
+        measureLabel: formatMeasure(effectiveMeasure.quantity, effectiveMeasure.unit),
+      };
+    });
+
+    return map;
+  }, [priceInsightsMap, products]);
 
   const cheapestPriceSummaryByProductId = useMemo(() => {
     const map: Record<string, { priceLabel: string | null; unitPriceLabel: string | null }> = {};
@@ -520,6 +572,12 @@ export default function ListScreen() {
 
   const handleAddText = async () => {
     if (!activeHouseholdId || isSubmitting) return;
+    if (isOffline) {
+      selectingSuggestionRef.current = false;
+      void hapticError();
+      setActionError(DEFAULT_OFFLINE_MESSAGE);
+      return;
+    }
 
     const value = query.trim();
     if (!value) {
@@ -540,13 +598,15 @@ export default function ListScreen() {
       }
 
       runListLayoutAnimation();
-      await addTextItem(value);
-      void hapticSuccess();
+      const ok = await runRequest(() => addTextItem(value));
+      if (ok) {
+        void hapticSuccess();
+      }
       resetSearchAfterAction({ keepKeyboardOpen: true });
     } catch (err) {
       selectingSuggestionRef.current = false;
       void hapticError();
-      showGenericErrorAlert();
+      setActionError(DEFAULT_ERROR_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }
@@ -554,6 +614,12 @@ export default function ListScreen() {
 
   const handleSelectProduct = async (productId: string, name: string) => {
     if (isSubmitting) return;
+    if (isOffline) {
+      selectingSuggestionRef.current = false;
+      void hapticError();
+      setActionError(DEFAULT_OFFLINE_MESSAGE);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -566,13 +632,15 @@ export default function ListScreen() {
       }
 
       runListLayoutAnimation();
-      await addProductItem(productId, name);
-      void hapticSuccess();
+      const ok = await runRequest(() => addProductItem(productId, name));
+      if (ok) {
+        void hapticSuccess();
+      }
       resetSearchAfterAction({ keepKeyboardOpen: false });
     } catch (err) {
       selectingSuggestionRef.current = false;
       void hapticError();
-      showGenericErrorAlert();
+      setActionError(DEFAULT_ERROR_MESSAGE);
     } finally {
       setIsSubmitting(false);
     }
@@ -602,11 +670,13 @@ export default function ListScreen() {
 
     try {
       runListLayoutAnimation();
-      await toggleItem(item.id, !item.is_checked);
-      void hapticTap();
+      const ok = await runRequest(() => toggleItem(item.id, !item.is_checked));
+      if (ok) {
+        void hapticTap();
+      }
     } catch (err) {
       void hapticError();
-      Alert.alert('Error al actualizar', (err as Error).message);
+      setActionError(DEFAULT_ERROR_MESSAGE);
     }
   };
 
@@ -623,12 +693,14 @@ export default function ListScreen() {
         onPress: async () => {
           try {
             runListLayoutAnimation();
-            await clearBoughtItems();
-            void hapticMedium();
-            await refreshShopping();
+              const ok = await runRequest(clearBoughtItems);
+              if (ok) {
+                void hapticMedium();
+                void runRequest(refreshShopping);
+              }
           } catch (err) {
             void hapticError();
-            Alert.alert('Error al borrar', (err as Error).message);
+              setActionError(DEFAULT_ERROR_MESSAGE);
           }
         },
       },
@@ -646,11 +718,13 @@ export default function ListScreen() {
         onPress: async () => {
           try {
             runListLayoutAnimation();
-            await deleteItem(item.id);
-            void hapticMedium();
+              const ok = await runRequest(() => deleteItem(item.id));
+              if (ok) {
+                void hapticMedium();
+              }
           } catch (err) {
             void hapticError();
-            Alert.alert('Error al borrar', (err as Error).message);
+              setActionError(DEFAULT_ERROR_MESSAGE);
           }
         },
       },
@@ -702,6 +776,14 @@ export default function ListScreen() {
     }
 
     return cheapestPriceSummaryByProductId[item.product_id] ?? { priceLabel: null, unitPriceLabel: null };
+  };
+
+  const getProductMeta = (item: ShoppingListItem) => {
+    if (!item.product_id) {
+      return null;
+    }
+
+    return productMetaById[item.product_id] ?? null;
   };
 
   if (!activeHouseholdId) {
@@ -769,10 +851,10 @@ export default function ListScreen() {
           )}
 
           <View style={[styles.contentStack, hasStores && styles.contentStackWithStores, { paddingBottom: listBottomInset }]}>
-            {error ? (
+            {inlineError ? (
               <View style={styles.errorCard}>
                 <View style={styles.errorRail} />
-                <Text style={styles.errorText}>{error}</Text>
+                <Text style={styles.errorText}>{inlineError}</Text>
               </View>
             ) : null}
 
@@ -808,6 +890,7 @@ export default function ListScreen() {
               totalCount={pendingItems.length}
               empty={pendingItems.length === 0}
               loading={shoppingLoading}
+              getProductMeta={getProductMeta}
               menuOpenItemId={openMenuItemId}
               menuAnchor={openMenuAnchor}
               animationsByItemId={rowAnimationsRef.current}
@@ -832,6 +915,7 @@ export default function ListScreen() {
               items={completedItems}
               empty={completedItems.length === 0}
               animationsByItemId={rowAnimationsRef.current}
+              getProductMeta={getProductMeta}
               onToggle={(item) => void handleToggle(item)}
               onEdit={handleEditItem}
               onViewProduct={handleViewProduct}

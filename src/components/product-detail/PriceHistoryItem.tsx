@@ -21,34 +21,39 @@ export function PriceHistoryItem({
   isCheapest,
   onOpenMenu,
 }: PriceHistoryItemProps) {
-  const detailParts = [measureLabel, unitPriceLabel].filter(Boolean);
-
   return (
     <View style={styles.row}>
       <View style={styles.content}>
         <View style={styles.topRow}>
-          <Text style={styles.storeName}>{storeName}</Text>
-          <Text style={styles.dateLabel}>{dateLabel}</Text>
-        </View>
-
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>{priceLabel}</Text>
+          <View style={styles.storeRow}>
+            <View style={styles.storeDot} />
+            <Text style={styles.storeName} numberOfLines={1}>{storeName}</Text>
+          </View>
           {isCheapest ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Más barato</Text>
+            <View style={styles.cheapestBadge}>
+              <Ionicons name="trending-down" size={11} color="#146C43" />
+              <Text style={styles.cheapestText}>Más barato</Text>
             </View>
           ) : null}
         </View>
 
-        {detailParts.length ? <Text style={styles.detailText}>{detailParts.join(' · ')}</Text> : null}
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>{priceLabel}</Text>
+          {measureLabel ? <Text style={styles.measureLabel}>{measureLabel}</Text> : null}
+        </View>
+
+        <View style={styles.metaRow}>
+          {unitPriceLabel ? <Text style={styles.metaText}>{unitPriceLabel}</Text> : null}
+          <Text style={styles.metaText}>{dateLabel}</Text>
+        </View>
       </View>
 
       <Pressable
         accessibilityRole="button"
-        onPress={(event) => onOpenMenu({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY })}
-        style={({ pressed }) => [styles.menuButton, pressed && styles.menuButtonPressed]}
+        onPress={(e) => onOpenMenu({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+        style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}
       >
-        <Ionicons name="ellipsis-vertical" size={18} color="#475467" />
+        <Ionicons name="ellipsis-vertical" size={16} color={tokens.colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -57,14 +62,14 @@ export function PriceHistoryItem({
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
+    gap: 12,
   },
   content: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   topRow: {
     flexDirection: 'row',
@@ -72,56 +77,76 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  storeName: {
+  storeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     flex: 1,
-    color: tokens.colors.text,
-    fontSize: 15,
+  },
+  storeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: tokens.colors.primary,
+    flexShrink: 0,
+  },
+  storeName: {
+    color: '#344054',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+  },
+  cheapestBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E8F5EE',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  cheapestText: {
+    color: '#146C43',
+    fontSize: 11,
     fontWeight: '700',
   },
-  dateLabel: {
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  priceLabel: {
+    color: '#111827',
+    fontSize: 22,
+    fontWeight: '800',
+    lineHeight: 26,
+  },
+  measureLabel: {
+    color: tokens.colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 22,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  metaText: {
     color: tokens.colors.textMuted,
     fontSize: 12,
     fontWeight: '500',
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  priceLabel: {
-    color: tokens.colors.text,
-    fontSize: 24,
-    lineHeight: 28,
-    fontWeight: '800',
-  },
-  detailText: {
-    color: tokens.colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#E8F5EE',
-  },
-  badgeText: {
-    color: '#146C43',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  menuButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  menuBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F4F6F8',
-    marginTop: 2,
+    flexShrink: 0,
   },
-  menuButtonPressed: {
-    backgroundColor: '#E9EEF2',
+  menuBtnPressed: {
+    backgroundColor: '#E5E9EF',
   },
 });

@@ -1,10 +1,11 @@
 {
   "expo": {
-    "name": "listo",
+    "name": "Listo",
     "slug": "listo",
+    "scheme": "listo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/branding/Logo Listo.png",
+    "icon": "./assets/branding/logo-listo.png",
     "userInterfaceStyle": "light",
 
     "splash": {
@@ -19,13 +20,19 @@
 
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/branding/Logo Listo.png",
+        "foregroundImage": "./assets/branding/logo-listo.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
-      "package": "com.francisco13021998.listo"
+      "package": "com.evolabs.listo",
+      "minSdkVersion": 24,
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.VIBRATE"
+      ]
     },
 
     "web": {

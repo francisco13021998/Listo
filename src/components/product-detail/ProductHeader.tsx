@@ -26,142 +26,174 @@ export function ProductHeader({
   onOpenActions,
 }: ProductHeaderProps) {
   return (
-    <View style={styles.hero}>
-      <View style={styles.topRow}>
-        <BackIconButton label="Volver" onPress={onBack} />
-        <MenuIconButton label="Abrir acciones" onPress={onOpenActions} />
+    <View style={styles.container}>
+      {/* Barra de navegación */}
+      <View style={styles.navBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          onPress={onBack}
+          style={({ pressed }) => [styles.navBtn, pressed && styles.navBtnPressed]}
+        >
+          <Ionicons name="chevron-back" size={20} color={tokens.colors.text} />
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Acciones del producto"
+          onPress={(e) => onOpenActions({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })}
+          style={({ pressed }) => [styles.navBtn, pressed && styles.navBtnPressed]}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color={tokens.colors.text} />
+        </Pressable>
       </View>
 
-      <View style={styles.identityRow}>
+      {/* Identidad del producto */}
+      <View style={styles.identity}>
         <View style={[styles.iconWrap, { backgroundColor: categoryIconBackground }]}>
-          <Ionicons name={categoryIcon} size={16} color={categoryIconColor} />
+          <Ionicons name={categoryIcon} size={28} color={categoryIconColor} />
         </View>
-
-        <Text style={styles.sectionTitle}>Detalle de producto</Text>
-      </View>
-      <Text style={styles.title}>{productName}</Text>
-      {summary ? <Text style={styles.summary}>{summary}</Text> : null}
-
-      <View style={styles.pricePanel}>
-        <Text style={styles.pricePanelLabel}>Precio más barato</Text>
-        <Text style={styles.pricePanelValue}>{latestPriceLabel ?? 'Sin precios todavía'}</Text>
-        <Text style={styles.pricePanelMeta}>{latestMetaLabel ?? 'Usa el menú de acciones para registrar el primer precio.'}</Text>
+        <View style={styles.identityText}>
+          <Text style={styles.productName} numberOfLines={2}>{productName}</Text>
+          {summary ? <Text style={styles.summary}>{summary}</Text> : null}
+        </View>
       </View>
 
+      {/* Tarjeta de mejor precio */}
+      {latestPriceLabel ? (
+        <View style={styles.priceCard}>
+          <View style={styles.priceAccent} />
+          <View style={styles.priceBody}>
+            <Text style={styles.priceCardLabel}>Mejor precio registrado</Text>
+            <Text style={styles.priceCardValue}>{latestPriceLabel}</Text>
+            {latestMetaLabel ? <Text style={styles.priceCardMeta}>{latestMetaLabel}</Text> : null}
+          </View>
+          <Ionicons name="trending-down-outline" size={22} color={tokens.colors.primary} style={styles.trendIcon} />
+        </View>
+      ) : (
+        <View style={styles.noPriceCard}>
+          <Ionicons name="pricetag-outline" size={15} color={tokens.colors.textMuted} />
+          <Text style={styles.noPriceText}>Aún sin precios · pulsa «Añadir» para el primero</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-function BackIconButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}>
-      <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
-    </Pressable>
-  );
-}
-
-function MenuIconButton({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: (anchor: { x: number; y: number }) => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={(event) => onPress({ x: event.nativeEvent.pageX, y: event.nativeEvent.pageY })}
-      style={({ pressed }) => [styles.iconButton, pressed && styles.iconButtonPressed]}
-    >
-      <Ionicons name="ellipsis-vertical" size={20} color="#FFFFFF" />
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  hero: {
-    borderRadius: 28,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 16,
-    backgroundColor: tokens.colors.primaryDark,
-    gap: 8,
+  container: {
+    gap: 16,
+    paddingBottom: 8,
   },
-  topRow: {
+  navBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+  navBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: '#EAEAEA',
   },
-  iconButtonPressed: {
-    backgroundColor: 'rgba(255,255,255,0.22)',
+  navBtnPressed: {
+    backgroundColor: '#D5D5D5',
+  },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
   },
   iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 56,
+    height: 56,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  identityText: {
+    flex: 1,
+    paddingTop: 4,
+    gap: 4,
   },
-  sectionTitle: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 12,
+  productName: {
+    color: tokens.colors.text,
+    fontSize: 24,
     fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  title: {
-    color: '#FFFFFF',
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: '800',
+    lineHeight: 28,
   },
   summary: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '600',
+    color: tokens.colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
   },
-  pricePanel: {
-    borderRadius: 20,
+  priceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: tokens.colors.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    overflow: 'hidden',
+    shadowColor: '#101828',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  priceAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+    backgroundColor: tokens.colors.primary,
+  },
+  priceBody: {
+    flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  pricePanelLabel: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 12,
+  priceCardLabel: {
+    color: tokens.colors.textMuted,
+    fontSize: 11,
     fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  pricePanelValue: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    lineHeight: 32,
+  priceCardValue: {
+    color: tokens.colors.text,
+    fontSize: 30,
     fontWeight: '800',
+    lineHeight: 36,
   },
-  pricePanelMeta: {
-    color: 'rgba(255,255,255,0.86)',
-    fontSize: 13,
-    lineHeight: 18,
+  priceCardMeta: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
     fontWeight: '500',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  trendIcon: {
+    paddingRight: 14,
+  },
+  noPriceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: tokens.colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  noPriceText: {
+    color: tokens.colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    flex: 1,
   },
 });

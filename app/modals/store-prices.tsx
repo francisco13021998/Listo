@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
+import { Paginator } from '../../src/components/Paginator';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useStores } from '../../src/hooks/useStores';
 import {
@@ -77,6 +78,8 @@ type DialogState =
   | { type: 'delete-all-prices' }
   | { type: 'delete-product-prices'; productId: string; productName: string };
 
+const PAGE_SIZE = 10;
+
 export default function StorePricesModal() {
   const router = useRouter();
   const { storeId } = useLocalSearchParams<{ storeId?: string | string[] }>();
@@ -92,6 +95,7 @@ export default function StorePricesModal() {
   const [storeMenuOpen, setStoreMenuOpen] = useState(false);
   const [openProductMenuId, setOpenProductMenuId] = useState<string | null>(null);
   const [dialogState, setDialogState] = useState<DialogState | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   const store = useMemo(() => {
     return stores.find((item) => item.id === resolvedStoreId) ?? null;
@@ -247,6 +251,13 @@ export default function StorePricesModal() {
       .filter((item): item is StoreProductListItem => Boolean(item));
   }, [groups]);
 
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [rowItems.length]);
+
+  const totalPages = Math.ceil(rowItems.length / PAGE_SIZE);
+  const pageItems = rowItems.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+
   const headerSummary = useMemo(() => {
     if (!rowItems.length) {
       return 'Aún no hay productos con precio en esta tienda.';
@@ -396,7 +407,8 @@ export default function StorePricesModal() {
         />
 
         <StoreProductsList
-          items={rowItems}
+          items={pageItems}
+          totalCount={rowItems.length}
           loading={loading}
           error={error}
           openMenuProductId={openProductMenuId}
@@ -408,6 +420,13 @@ export default function StorePricesModal() {
           onToggleMenu={handleToggleProductMenu}
           onEditPrice={handleEditPrice}
           onDeletePrices={handleRequestDeleteProductPrices}
+        />
+
+        <Paginator
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPrevious={() => setCurrentPage((p) => p - 1)}
+          onNext={() => setCurrentPage((p) => p + 1)}
         />
       </View>
 

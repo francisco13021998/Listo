@@ -9,6 +9,7 @@ type BoughtSectionProps = {
   items: ShoppingListItem[];
   empty: boolean;
   animationsByItemId: Record<string, { checked: Animated.Value; mount: Animated.Value }>;
+  getProductMeta: (item: ShoppingListItem) => { brandLabel: string | null; measureLabel: string | null } | null;
   onToggle: (item: ShoppingListItem) => void;
   onEdit: (item: ShoppingListItem) => void;
   onViewProduct: (item: ShoppingListItem) => void;
@@ -22,6 +23,7 @@ export function BoughtSection({
   items,
   empty,
   animationsByItemId,
+  getProductMeta,
   onToggle,
   onEdit,
   onViewProduct,
@@ -71,6 +73,7 @@ export function BoughtSection({
               inputRange: [0, 1],
               outputRange: [1, 0.78],
             });
+            const productMeta = getProductMeta(item);
 
             return (
               <Animated.View
@@ -85,7 +88,25 @@ export function BoughtSection({
                   <View style={styles.rowCheck}>
                     <Text style={styles.rowCheckText}>✓</Text>
                   </View>
-                  <Text style={styles.rowText}>{item.text}</Text>
+
+                  <View style={styles.rowTextBlock}>
+                    <View style={styles.rowTitleLine}>
+                      <Text style={styles.rowText} numberOfLines={1}>
+                        {item.text}
+                      </Text>
+                      {productMeta?.brandLabel ? (
+                        <Text style={styles.rowBrandChip} numberOfLines={1}>
+                          {productMeta.brandLabel}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {productMeta?.measureLabel ? (
+                      <Text style={styles.rowMeasureText} numberOfLines={1}>
+                        {productMeta.measureLabel}
+                      </Text>
+                    ) : null}
+                  </View>
                 </Pressable>
 
                 <Pressable
@@ -231,6 +252,15 @@ const styles = StyleSheet.create({
   rowPressed: {
     opacity: 0.92,
   },
+  rowTextBlock: {
+    flex: 1,
+    gap: 3,
+  },
+  rowTitleLine: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
+  },
   rowCheck: {
     width: 22,
     height: 22,
@@ -246,11 +276,28 @@ const styles = StyleSheet.create({
   },
   rowText: {
     flex: 1,
-    color: '#98A2B3',
+    color: '#667085',
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '700',
     textDecorationLine: 'line-through',
+  },
+  rowBrandChip: {
+    maxWidth: '42%',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: '#F2F4F7',
+    color: '#667085',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '700',
+  },
+  rowMeasureText: {
+    color: '#667085',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
   },
   menuButton: {
     position: 'relative',

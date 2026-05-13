@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Screen } from '../../src/components/Screen';
 import { SectionCard } from '../../src/components/SectionCard';
@@ -442,12 +442,7 @@ export default function PriceEditorModal() {
         }
 
         if (returnTo === '/modals/product-prices') {
-          router.replace({
-            pathname: returnTo,
-            params: {
-              productId: productId ?? '',
-            },
-          });
+          router.back();
           return;
         }
 
@@ -482,9 +477,10 @@ export default function PriceEditorModal() {
   if (isEditingPrice && !loadedPriceEntry) {
     return (
       <Screen scrollable>
-        <SectionCard title="Editar precio" subtitle="Cargando precio seleccionado…">
-          <EmptyState title="Preparando datos" subtitle="Un momento, estamos cargando el precio para editarlo." actionLabel="Cerrar" onAction={() => router.back()} />
-        </SectionCard>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color="#1A3C2E" />
+          <Text style={styles.loadingText}>Cargando precio…</Text>
+        </View>
       </Screen>
     );
   }
@@ -718,6 +714,18 @@ export default function PriceEditorModal() {
 const styles = StyleSheet.create({
   page: {
     gap: 14,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 60,
+  },
+  loadingText: {
+    color: '#667085',
+    fontSize: 14,
+    fontWeight: '600',
   },
   hero: {
     position: 'relative',

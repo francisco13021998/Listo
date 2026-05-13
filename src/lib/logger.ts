@@ -1,4 +1,5 @@
 export function logInfo(message: string, data?: any) {
+  if (!__DEV__) return;
   if (data !== undefined) {
     console.log('[INFO]', message, data);
     return;

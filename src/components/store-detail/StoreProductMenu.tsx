@@ -17,7 +17,7 @@ export function StoreProductMenu({ visible, loading, onViewProduct, onEditPrice,
   return (
     <View style={styles.menu}>
       <MenuAction icon="cube-outline" label="Ver detalle del producto" onPress={onViewProduct} disabled={loading} />
-      <MenuAction icon="pricetag-outline" label="Editar último precio" onPress={onEditPrice} disabled={loading} />
+      <MenuAction icon="pricetag-outline" label="Editar precio" onPress={onEditPrice} disabled={loading} />
       <MenuAction icon="trash-outline" label="Borrar precios de este producto" onPress={onDeletePrices} danger disabled={loading} />
     </View>
   );

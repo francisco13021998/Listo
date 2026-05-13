@@ -50,7 +50,7 @@ export function PendingItemMenu({
   const menuWidth = 220;
   const unorderedActions: Array<ActionItem | null> = canRegisterProduct
     ? [
-        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Añadir producto', onPress: onRegisterProduct } : null,
+        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Registrar producto', onPress: onRegisterProduct } : null,
         canEdit ? { icon: 'pencil-outline' as const, label: 'Editar elemento', onPress: onEdit } : null,
         canViewProduct ? { icon: 'cube-outline' as const, label: 'Ver producto', onPress: onViewProduct } : null,
         canManagePrice ? { icon: 'pricetag-outline' as const, label: 'Añadir precio', onPress: onManagePrice } : null,
@@ -60,7 +60,7 @@ export function PendingItemMenu({
         canEdit ? { icon: 'pencil-outline' as const, label: 'Editar elemento', onPress: onEdit } : null,
         canViewProduct ? { icon: 'cube-outline' as const, label: 'Ver producto', onPress: onViewProduct } : null,
         canManagePrice ? { icon: 'pricetag-outline' as const, label: 'Añadir precio', onPress: onManagePrice } : null,
-        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Añadir producto', onPress: onRegisterProduct } : null,
+        canRegisterProduct ? { icon: 'add-circle-outline' as const, label: 'Registrar producto', onPress: onRegisterProduct } : null,
         { icon: 'trash-outline' as const, label: 'Eliminar de la lista', onPress: onDelete, danger: true },
       ];
 

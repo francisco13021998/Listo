@@ -16,6 +16,7 @@ type PendingSectionProps = {
   totalCount: number;
   empty: boolean;
   loading?: boolean;
+  getProductMeta: (item: ShoppingListItem) => { brandLabel: string | null; measureLabel: string | null } | null;
   menuOpenItemId: string | null;
   menuAnchor: { x: number; y: number } | null;
   animationsByItemId: Record<string, { checked: Animated.Value; mount: Animated.Value }>;
@@ -35,6 +36,7 @@ export function PendingSection({
   totalCount,
   empty,
   loading,
+  getProductMeta,
   menuOpenItemId,
   menuAnchor,
   animationsByItemId,
@@ -83,6 +85,7 @@ export function PendingSection({
                   item={item}
                   priceLabel={summary.priceLabel}
                   unitPriceLabel={summary.unitPriceLabel}
+                  productMeta={getProductMeta(item)}
                   menuOpen={menuOpenItemId === item.id}
                   menuAnchor={menuOpenItemId === item.id ? menuAnchor : null}
                   showDivider={index > 0}

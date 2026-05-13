@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Linking from 'expo-linking';
 import { Link, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { AuthLayout } from '../../src/components/AuthLayout';
 import { hapticTap } from '../../src/lib/haptics';
@@ -17,34 +16,6 @@ export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const confirmationAlertShownRef = useRef(false);
-
-  useEffect(() => {
-    const handleDeepLink = (url?: string | null) => {
-      if (!url || confirmationAlertShownRef.current) {
-        return;
-      }
-
-      const parsed = Linking.parse(url);
-      if (String(parsed.queryParams?.confirmed) !== 'true') {
-        return;
-      }
-
-      confirmationAlertShownRef.current = true;
-      Alert.alert('Cuenta confirmada', 'Tu usuario ha sido confirmado correctamente');
-    };
-
-    void Linking.getInitialURL().then(handleDeepLink);
-
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      handleDeepLink(url);
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
   const handleEmailChange = (nextEmail: string) => {
     if (__DEV__ && nextEmail === demoLoginTrigger) {
       setEmail(demoLoginEmail);

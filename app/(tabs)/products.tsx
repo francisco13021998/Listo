@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -16,6 +16,7 @@ import { CatalogProductItem } from '../../src/components/products/types';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { usePrices } from '../../src/hooks/usePrices';
 import { useProducts } from '../../src/hooks/useProducts';
+import { useSession } from '../../src/hooks/useSession';
 import { useStores } from '../../src/hooks/useStores';
 import { getCategoryVisual } from '../../src/theme/visuals';
 import { tokens } from '../../src/theme/tokens';
@@ -73,15 +74,18 @@ function formatLatestMeasureLabel(product: Product, latest: PriceEntry | undefin
 
 export default function ProductsScreen() {
   const router = useRouter();
-  const { activeHouseholdId } = useActiveHousehold();
+  const { activeHouseholdId, isHydrated } = useActiveHousehold();
+  const { loading: sessionLoading, profileComparisonMode, refreshProfile } = useSession();
   const { products, loading, error, deleteProduct, refresh: productsRefresh } = useProducts(activeHouseholdId);
   const { stores, loading: storesLoading, refresh: storesRefresh } = useStores(activeHouseholdId);
-  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: pricesRefresh } = usePrices(activeHouseholdId);
+  const { latestByProductId, insightsByProductId, loading: pricesLoading, refresh: pricesRefresh } = usePrices(activeHouseholdId, profileComparisonMode);
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuProductId, setOpenMenuProductId] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(10);
+  const prevSearchRef = useRef(searchQuery);
   const [hasInitialLoadCompleted, setHasInitialLoadCompleted] = useState(false);
   const isAnyCatalogDataLoading = loading || storesLoading || pricesLoading;
-  const isBootstrapping = Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyCatalogDataLoading;
+  const isBootstrapping = sessionLoading || !isHydrated || (Boolean(activeHouseholdId) && !hasInitialLoadCompleted && isAnyCatalogDataLoading);
 
   useEffect(() => {
     setHasInitialLoadCompleted(false);
@@ -102,7 +106,8 @@ export default function ProductsScreen() {
       void productsRefresh();
       void storesRefresh();
       void pricesRefresh();
-    }, [pricesRefresh, productsRefresh, storesRefresh])
+      void refreshProfile();
+    }, [pricesRefresh, productsRefresh, storesRefresh, refreshProfile])
   );
 
   const storeNameById = useMemo(() => {
@@ -129,6 +134,11 @@ export default function ProductsScreen() {
     });
   }, [products, searchQuery]);
 
+  if (prevSearchRef.current !== searchQuery) {
+    prevSearchRef.current = searchQuery;
+    setVisibleCount(10);
+  }
+
   const catalogItems = useMemo<CatalogProductItem[]>(() => {
     return filteredProducts.map((product) => {
       const latest = latestByProductId[product.id];
@@ -148,6 +158,9 @@ export default function ProductsScreen() {
       };
     });
   }, [filteredProducts, latestByProductId, storeNameById]);
+
+  const visibleItems = catalogItems.slice(0, visibleCount);
+  const hasMore = visibleCount < catalogItems.length;
 
   const handleCreateProduct = () => {
     setOpenMenuProductId(null);
@@ -275,9 +288,9 @@ export default function ProductsScreen() {
                   </View>
                 ) : null}
 
-                {catalogItems.length > 0 ? (
+                {visibleItems.length > 0 ? (
                   <View style={styles.cardsList}>
-                    {catalogItems.map((item) => (
+                    {visibleItems.map((item) => (
                       <ProductCard
                         key={item.id}
                         item={item}
@@ -302,6 +315,15 @@ export default function ProductsScreen() {
                         onDeleteProduct={() => void handleDelete(item.id)}
                       />
                     ))}
+                    {hasMore ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        onPress={() => setVisibleCount((n) => n + 10)}
+                        style={({ pressed }) => [styles.loadMoreButton, pressed && styles.loadMoreButtonPressed]}
+                      >
+                        <Text style={styles.loadMoreText}>Mostrar más</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : !loading ? (
                   <View style={styles.emptyWrap}>
@@ -479,6 +501,23 @@ const styles = StyleSheet.create({
   },
   cardsList: {
     gap: 10,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DCE6DE',
+  },
+  loadMoreButtonPressed: {
+    backgroundColor: '#EAF4ED',
+    borderColor: '#176B3A',
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#176B3A',
   },
   emptyWrap: {
     borderRadius: 20,

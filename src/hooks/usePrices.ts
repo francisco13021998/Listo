@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { PriceEntry, PriceInsight } from '../domain/prices';
 import { addPrice, getPriceInsightsForHousehold, listPriceHistory } from '../services/prices.service';
+import { ComparisonMode } from './useSession';
 
 const noop = async () => {
   // no-op
@@ -24,7 +25,7 @@ type UsePricesResult = {
   getHistory: (productId: string) => Promise<PriceEntry[]>;
 };
 
-export function usePrices(householdId: string | null): UsePricesResult {
+export function usePrices(householdId: string | null, comparisonMode: ComparisonMode = 'unit_price'): UsePricesResult {
   const [latestByProductId, setLatestByProductId] = useState<Record<string, PriceEntry>>({});
   const [insightsByProductId, setInsightsByProductId] = useState<Record<string, PriceInsight>>({});
   const [loading, setLoading] = useState(() => Boolean(householdId));
@@ -39,7 +40,7 @@ export function usePrices(householdId: string | null): UsePricesResult {
     setLoading(true);
     setError(null);
     try {
-      const insights = await getPriceInsightsForHousehold(householdId);
+      const insights = await getPriceInsightsForHousehold(householdId, comparisonMode);
       const map: Record<string, PriceEntry> = {};
 
       for (const [productId, insight] of Object.entries(insights)) {
@@ -55,7 +56,7 @@ export function usePrices(householdId: string | null): UsePricesResult {
     } finally {
       setLoading(false);
     }
-  }, [householdId]);
+  }, [householdId, comparisonMode]);
 
   const add = useCallback(
     async (params: {

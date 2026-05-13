@@ -10,6 +10,7 @@ import { CreateActionButtonBlock } from '../../src/components/CreateActionButton
 import { StoreActionsMenu } from '../../src/components/store-detail/StoreActionsMenu';
 import { StoreConfirmDialog } from '../../src/components/store-detail/StoreConfirmDialog';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
+import { useSession } from '../../src/hooks/useSession';
 import { useStores } from '../../src/hooks/useStores';
 import { hapticDelete, hapticMedium } from '../../src/lib/haptics';
 import { deleteAllPricesForStore } from '../../src/services/prices.service';
@@ -24,14 +25,16 @@ type DialogState =
 
 export default function StoresScreen() {
   const router = useRouter();
-  const { activeHouseholdId } = useActiveHousehold();
+  const { activeHouseholdId, isHydrated } = useActiveHousehold();
+  const { loading: sessionLoading } = useSession();
   const { stores, loading, error, deleteStore, refresh } = useStores(activeHouseholdId);
   const [openMenuStoreId, setOpenMenuStoreId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [dialogState, setDialogState] = useState<DialogState | null>(null);
   const [storeHasPricesById, setStoreHasPricesById] = useState<Record<string, boolean>>({});
   const [hasInitialLoadCompleted, setHasInitialLoadCompleted] = useState(false);
-  const isBootstrapping = Boolean(activeHouseholdId) && !hasInitialLoadCompleted && loading;
+  const [storeVisibleCount, setStoreVisibleCount] = useState(10);
+  const isBootstrapping = sessionLoading || !isHydrated || (Boolean(activeHouseholdId) && !hasInitialLoadCompleted && loading);
 
   useEffect(() => {
     setHasInitialLoadCompleted(false);
@@ -59,6 +62,9 @@ export default function StoresScreen() {
   );
   const storeVisual = getStoreVisual();
   const hasStores = sortedStores.length > 0;
+
+  const visibleStores = sortedStores.slice(0, storeVisibleCount);
+  const hasMoreStores = storeVisibleCount < sortedStores.length;
 
   const closeMenu = useCallback(() => {
     setOpenMenuStoreId(null);
@@ -295,7 +301,7 @@ export default function StoresScreen() {
                 ) : null}
 
                 <View style={styles.rowsGroup}>
-                  {sortedStores.map((item) => (
+                  {visibleStores.map((item) => (
                     <View key={item.id} style={[styles.storeRow, openMenuStoreId === item.id && styles.storeRowMenuOpen]}>
                       <Pressable
                         accessibilityRole="button"
@@ -331,6 +337,15 @@ export default function StoresScreen() {
                       />
                     </View>
                   ))}
+                  {hasMoreStores ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => setStoreVisibleCount((n) => n + 10)}
+                      style={({ pressed }) => [styles.loadMoreButton, pressed && styles.loadMoreButtonPressed]}
+                    >
+                      <Text style={styles.loadMoreText}>Mostrar más</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             </>
@@ -415,6 +430,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: -8,
     backgroundColor: tokens.colors.background,
+  },
+  loadingText: {
+    color: tokens.colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
   },
   heroHeader: {
     position: 'relative',
@@ -572,6 +592,23 @@ const styles = StyleSheet.create({
   },
   rowsGroup: {
     gap: 12,
+  },
+  loadMoreButton: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DCE6DE',
+  },
+  loadMoreButtonPressed: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#4F46E5',
+  },
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#176B3A',
   },
   storeRow: {
     position: 'relative',

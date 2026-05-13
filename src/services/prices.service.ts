@@ -3,6 +3,19 @@ import { ProductUnit } from '../domain/product';
 import { supabase } from '../lib/supabase';
 import { logError, logInfo } from '../lib/logger';
 
+/**
+ * Normaliza la cantidad a una unidad de referencia para comparar precios por unidad.
+ * Reglas:
+ *   g  → kg  (÷1000)
+ *   ml → L   (÷1000) [tratado igual que kg para comparación cross-familia]
+ *   kg, l, u → se usan tal cual (1 u = 1 kg/L)
+ */
+function getUnitPriceCents(priceCents: number, quantity: number | null, unit: ProductUnit | null): number | null {
+  if (!quantity || quantity <= 0 || !unit) return null;
+  const normalizedQty = unit === 'g' || unit === 'ml' ? quantity / 1000 : quantity;
+  return priceCents / normalizedQty;
+}
+
 type AddPriceParams = {
   householdId: string;
   productId: string;
@@ -18,6 +31,44 @@ export async function addPrice(params: AddPriceParams): Promise<void> {
   try {
     const { householdId, productId, storeId, priceCents, quantity, unit, currency, purchasedAt } = params;
     logInfo('addPrice', { householdId, productId, storeId, priceCents, quantity, unit, currency, purchasedAt });
+
+    const { data: existingEntries, error: lookupError } = await supabase
+      .from('price_entries')
+      .select('id')
+      .eq('household_id', householdId)
+      .eq('product_id', productId)
+      .eq('store_id', storeId)
+      .order('purchased_at', { ascending: false });
+
+    if (lookupError) throw lookupError;
+
+    const matchedEntries = (existingEntries ?? []) as Array<{ id: string }>;
+    const [primaryEntry, ...duplicateEntries] = matchedEntries;
+
+    if (primaryEntry) {
+      const { error: updateError } = await supabase
+        .from('price_entries')
+        .update({
+          price_cents: priceCents,
+          quantity: quantity ?? null,
+          unit: unit ?? null,
+          currency: currency ?? null,
+          purchased_at: purchasedAt ?? new Date().toISOString(),
+        })
+        .eq('id', primaryEntry.id)
+        .eq('household_id', householdId);
+
+      if (updateError) throw updateError;
+
+      if (duplicateEntries.length > 0) {
+        const duplicateIds = duplicateEntries.map((entry) => entry.id);
+        const { error: deleteError } = await supabase.from('price_entries').delete().in('id', duplicateIds);
+
+        if (deleteError) throw deleteError;
+      }
+
+      return;
+    }
 
     const { error } = await supabase.from('price_entries').insert({
       household_id: householdId,
@@ -112,7 +163,8 @@ export async function listPriceHistory(householdId: string, productId: string): 
 }
 
 export async function getPriceInsightsForHousehold(
-  householdId: string
+  householdId: string,
+  comparisonMode: 'unit_price' | 'total_price' = 'unit_price'
 ): Promise<Record<string, PriceInsight>> {
   try {
     logInfo('getPriceInsightsForHousehold', { householdId });
@@ -150,12 +202,24 @@ export async function getPriceInsightsForHousehold(
         bucket.latest = entry;
       }
 
-      if (
-        !bucket.cheapest ||
-        entry.price_cents < bucket.cheapest.price_cents ||
-        (entry.price_cents === bucket.cheapest.price_cents && entry.purchased_at > bucket.cheapest.purchased_at)
-      ) {
+      if (!bucket.cheapest) {
         bucket.cheapest = entry;
+      } else {
+        let isCheaper: boolean;
+        if (comparisonMode === 'unit_price') {
+          const entryUP = getUnitPriceCents(entry.price_cents, entry.quantity, entry.unit);
+          const currentUP = getUnitPriceCents(bucket.cheapest.price_cents, bucket.cheapest.quantity, bucket.cheapest.unit);
+          if (entryUP !== null && currentUP !== null) {
+            isCheaper = entryUP < currentUP || (entryUP === currentUP && entry.purchased_at > bucket.cheapest.purchased_at);
+          } else {
+            isCheaper = entry.price_cents < bucket.cheapest.price_cents ||
+              (entry.price_cents === bucket.cheapest.price_cents && entry.purchased_at > bucket.cheapest.purchased_at);
+          }
+        } else {
+          isCheaper = entry.price_cents < bucket.cheapest.price_cents ||
+            (entry.price_cents === bucket.cheapest.price_cents && entry.purchased_at > bucket.cheapest.purchased_at);
+        }
+        if (isCheaper) bucket.cheapest = entry;
       }
     }
 

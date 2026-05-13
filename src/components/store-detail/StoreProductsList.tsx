@@ -5,6 +5,7 @@ import { tokens } from '../../theme/tokens';
 
 type StoreProductsListProps = {
   items: StoreProductListItem[];
+  totalCount?: number;
   loading?: boolean;
   error?: string | null;
   openMenuProductId: string | null;
@@ -17,6 +18,7 @@ type StoreProductsListProps = {
 
 export function StoreProductsList({
   items,
+  totalCount,
   loading,
   error,
   openMenuProductId,
@@ -34,7 +36,7 @@ export function StoreProductsList({
           <Text style={styles.subtitle}>Aquí ves el último precio guardado de cada producto.</Text>
         </View>
         <View style={styles.countBadge}>
-          <Text style={styles.countText}>{items.length}</Text>
+          <Text style={styles.countText}>{totalCount ?? items.length}</Text>
         </View>
       </View>
 

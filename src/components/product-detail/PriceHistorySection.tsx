@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { EmptyState } from '../EmptyState';
-import { SecondaryButton } from '../SecondaryButton';
 import { tokens } from '../../theme/tokens';
 import { PriceHistoryItem } from './PriceHistoryItem';
 
@@ -25,37 +25,51 @@ type PriceHistorySectionProps = {
 
 export function PriceHistorySection({ entries, loading, error, storeCount, onOpenEntryMenu, onAddPrice }: PriceHistorySectionProps) {
   const entryCount = entries.length;
-  const summary = `${entryCount} ${entryCount === 1 ? 'precio guardado' : 'precios guardados'} · ${storeCount} ${storeCount === 1 ? 'tienda' : 'tiendas'}`;
 
   return (
-    <View style={styles.section}>
-      <View style={styles.header}>
-        <View style={styles.headerTopRow}>
-          <View style={styles.headerTextBlock}>
-            <Text style={styles.title}>Historial de precios</Text>
-            {!loading && !error && entries.length > 0 ? <Text style={styles.summary}>{summary}</Text> : null}
+    <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardHeaderLeft}>
+            <View style={styles.cardIcon}>
+              <Ionicons name="pricetags-outline" size={15} color={tokens.colors.primary} />
+            </View>
+            <View>
+              <Text style={styles.cardTitle}>Precios registrados</Text>
+              {!loading && !error && entryCount > 0 ? (
+                <Text style={styles.cardSubtitle}>
+                  {entryCount} {entryCount === 1 ? 'precio' : 'precios'} · {storeCount} {storeCount === 1 ? 'tienda' : 'tiendas'}
+                </Text>
+              ) : null}
+            </View>
           </View>
 
-          <SecondaryButton title="Añadir precio" onPress={onAddPrice} />
+          <Pressable
+            accessibilityRole="button"
+            onPress={onAddPrice}
+            style={({ pressed }) => [styles.addBtn, pressed && styles.addBtnPressed]}
+          >
+            <Ionicons name="add" size={16} color="#FFFFFF" />
+            <Text style={styles.addBtnText}>Añadir</Text>
+          </Pressable>
         </View>
-      </View>
 
-      <View style={styles.panel}>
-        {loading ? <Text style={styles.statusText}>Cargando histórico…</Text> : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <View style={styles.divider} />
 
-        {!loading && !error && entries.length === 0 ? (
-          <View style={styles.emptyStateWrap}>
+        {loading ? (
+          <Text style={styles.statusText}>Cargando precios…</Text>
+        ) : error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : entryCount === 0 ? (
+          <View style={styles.emptyWrap}>
             <EmptyState
               title="Sin precios todavía"
-              subtitle="Usa el menú de arriba para añadir el primer precio y empezar a construir el historial."
+              subtitle="Pulsa «Añadir» para registrar el primer precio."
             />
           </View>
-        ) : null}
-
-        {!loading && !error && entries.length > 0
-          ? entries.map((entry, index) => (
-              <View key={entry.id} style={index < entries.length - 1 ? styles.itemBorder : undefined}>
+        ) : (
+          <View style={styles.itemsList}>
+            {entries.map((entry, index) => (
+              <View key={entry.id} style={index < entries.length - 1 ? styles.itemSeparator : undefined}>
                 <PriceHistoryItem
                   storeName={entry.storeName}
                   priceLabel={entry.priceLabel}
@@ -66,48 +80,78 @@ export function PriceHistorySection({ entries, loading, error, storeCount, onOpe
                   onOpenMenu={(anchor) => onOpenEntryMenu(entry.id, anchor)}
                 />
               </View>
-            ))
-          : null}
+            ))}
+          </View>
+        )}
       </View>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: 12,
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#101828',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-  header: {
-    gap: 3,
-  },
-  headerTopRow: {
+  cardHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  headerTextBlock: {
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
-    gap: 3,
   },
-  title: {
-    color: tokens.colors.text,
-    fontSize: 21,
-    lineHeight: 26,
-    fontWeight: '800',
+  cardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    backgroundColor: tokens.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  summary: {
-    color: '#475467',
+  cardTitle: {
+    color: '#111827',
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  cardSubtitle: {
+    color: tokens.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: tokens.colors.primaryDark,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  addBtnPressed: {
+    opacity: 0.82,
+  },
+  addBtnText: {
+    color: '#FFFFFF',
     fontSize: 13,
-    lineHeight: 18,
     fontWeight: '700',
   },
-  panel: {
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
-    overflow: 'hidden',
+  divider: {
+    height: 1,
+    backgroundColor: '#F0F2F4',
   },
   statusText: {
     paddingHorizontal: 16,
@@ -120,12 +164,16 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     color: '#B42318',
     fontSize: 13,
+    fontWeight: '600',
   },
-  emptyStateWrap: {
-    paddingVertical: 6,
+  emptyWrap: {
+    paddingVertical: 8,
   },
-  itemBorder: {
+  itemsList: {
+    // no gap — dividers between items handle separation
+  },
+  itemSeparator: {
     borderBottomWidth: 1,
-    borderBottomColor: '#EEF1F4',
+    borderBottomColor: '#F0F2F4',
   },
 });

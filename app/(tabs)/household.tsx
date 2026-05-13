@@ -1,19 +1,14 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, Alert, Pressable, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, Alert, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '../../src/components/Screen';
-import { SectionCard } from '../../src/components/SectionCard';
-import { PrimaryButton } from '../../src/components/PrimaryButton';
-import { SecondaryButton } from '../../src/components/SecondaryButton';
 import { SwipeTabs } from '../../src/components/SwipeTabs';
-import { EmptyState } from '../../src/components/EmptyState';
 import { HouseholdAccessModal } from '../../src/components/household/HouseholdAccessModal';
 import { HouseholdSelectionCard } from '../../src/components/household/HouseholdSelectionCard';
 import { LeaveHouseholdDialog } from '../../src/components/household/LeaveHouseholdDialog';
 import { useActiveHousehold } from '../../src/hooks/useActiveHousehold';
 import { useHouseholds } from '../../src/hooks/useHouseholds';
-import { useShoppingList } from '../../src/hooks/useShoppingList';
 import { useSession } from '../../src/hooks/useSession';
 import { hapticError, hapticMedium, hapticSuccess, hapticTap } from '../../src/lib/haptics';
 import { showGenericErrorAlert } from '../../src/lib/uiError';
@@ -78,6 +73,7 @@ export default function HouseholdScreen() {
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState<string | null>(null);
+  const isBootstrapping = sessionLoading || !isHydrated || (!hasLoaded && loading);
 
   const activeHousehold = useMemo(
     () => households.find((household) => household.id === activeHouseholdId) ?? null,
@@ -152,12 +148,25 @@ export default function HouseholdScreen() {
     }
   }, [router, sessionLoading, user]);
 
-  if (!isHydrated || sessionLoading) {
+  if (isBootstrapping) {
     return (
-      <Screen includeBottomSafeArea={false}>
-        <View style={styles.center}>
-          <Text style={styles.centerText}>Cargando…</Text>
-        </View>
+      <Screen scrollable includeBottomSafeArea={false}>
+        <SwipeTabs style={styles.page}>
+          <View style={styles.heroHeader}>
+            <View style={styles.heroContent}>
+              <Text style={styles.heroEyebrow}>LISTO</Text>
+              <Text style={styles.heroTitle}>Hogar</Text>
+              <Text style={styles.heroSubtitle}>Preparando tu hogar y tus miembros…</Text>
+            </View>
+            <View style={styles.heroOrbPrimary} />
+            <View style={styles.heroOrbSecondary} />
+          </View>
+
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={tokens.colors.primaryDark} />
+            <Text style={styles.loadingText}>Cargando tu hogar…</Text>
+          </View>
+        </SwipeTabs>
       </Screen>
     );
   }
@@ -325,128 +334,114 @@ export default function HouseholdScreen() {
     }
   };
 
-  const noActiveHero = (
-    <View style={styles.noActiveHeroHeader}>
-      <View style={styles.noActiveHeroContent}>
-        <View style={styles.noActiveHeroBadge}>
-          <Text style={styles.noActiveHeroBadgeText}>Aún no has entrado</Text>
-        </View>
-        <Text style={styles.noActiveHeroTitle}>Elige tu hogar</Text>
-        <Text style={styles.noActiveHeroSubtitle}>Aquí verás los hogares en los que ya estás o podrás crear uno nuevo para empezar.</Text>
-      </View>
-    </View>
-  );
-
-  const activeHero = (
-    <View style={styles.activeHeroHeader}>
-      <View style={styles.activeHeroContent}>
-        <View style={styles.activeHeroBadge}>
-          <Ionicons name="checkmark-circle" size={14} color={tokens.colors.primaryDark} />
-          <Text style={styles.activeHeroBadgeText}>Hogar activo</Text>
-        </View>
-        <Text style={styles.activeHeroTitle}>Ya estás dentro de tu hogar</Text>
-        <Text style={styles.activeHeroSubtitle}>Desde aquí puedes gestionar el hogar que estás usando ahora mismo, invitar a otras personas o cambiar de hogar.</Text>
-      </View>
-    </View>
-  );
-
   return (
     <Screen scrollable includeBottomSafeArea={false}>
       <SwipeTabs style={styles.page}>
-        {activeHouseholdId ? activeHero : noActiveHero}
+
+        {/* Header compartido — verde oscuro como el resto de pantallas */}
+        <View style={styles.heroHeader}>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroEyebrow}>{activeHouseholdId ? 'HOGAR ACTIVO' : 'LISTO'}</Text>
+            <Text style={styles.pageTitle}>
+              {activeHouseholdId ? (activeHousehold?.name ?? 'Mi hogar') : 'Hogar'}
+            </Text>
+          </View>
+          <View style={styles.heroOrbPrimary} />
+          <View style={styles.heroOrbSecondary} />
+        </View>
 
         <View style={styles.contentStack}>
+
+          {/* ── ESCENARIO: HOY hay hogar activo ── */}
           {activeHouseholdId ? (
             <>
-              <View style={styles.activeSummaryCard}>
-                <View style={styles.activeSummaryHeader}>
-                  <View style={styles.activeSummaryBadge}>
-                    <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                    <Text style={styles.activeSummaryBadgeText}>Activo</Text>
-                  </View>
-                  <Text style={styles.activeSummaryLabel}>Hogar actual</Text>
-                </View>
-
-                <Text style={styles.activeSummaryName}>{activeHousehold ? activeHousehold.name : 'Hogar activo'}</Text>
-                <Text style={styles.activeSummaryText}>Este es el hogar que estás usando ahora mismo.</Text>
-
-                <View style={styles.activeActions}>
-                  <Pressable
-                    style={({ pressed }) => [styles.secondaryAction, pressed && styles.secondaryActionPressed]}
-                    onPress={exitHousehold}
-                  >
-                    <Text style={styles.secondaryActionText}>Cambiar de hogar</Text>
-                  </Pressable>
-
-                  <View style={styles.inviteBlock}>
-                    <View style={styles.inviteBlockHeader}>
-                      <View>
-                        <Text style={styles.inviteBlockTitle}>Código para invitar a otra persona</Text>
-                        <Text style={styles.inviteBlockSubtitle}>Crea un código temporal para que alguien pueda entrar a este hogar.</Text>
-                      </View>
+              {/* Miembros */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="people-outline" size={18} color={tokens.colors.primary} />
+                  <Text style={styles.cardTitle}>Miembros</Text>
+                  {householdMembers.length > 0 ? (
+                    <View style={styles.countPill}>
+                      <Text style={styles.countPillText}>{householdMembers.length}</Text>
                     </View>
-
-                    <Pressable
-                      style={({ pressed }) => [styles.primaryAction, (pressed || inviteLoading) && styles.primaryActionPressed]}
-                      onPress={handleCreateInvitation}
-                      disabled={inviteLoading}
-                    >
-                      <Text style={styles.primaryActionText}>{inviteLoading ? 'Generando…' : 'Crear código'}</Text>
-                    </Pressable>
-
-                    {inviteCode ? (
-                      <View style={styles.inviteCodeCard}>
-                        <Text style={styles.inviteCodeLabel}>Código activo</Text>
-                        <Text style={styles.inviteCodeValue}>{inviteCode}</Text>
-                        <Text style={styles.inviteCodeHelp}>Caduca en {formatRemainingTime(inviteRemainingSeconds)}. Se desactiva automáticamente.</Text>
-                      </View>
-                    ) : null}
-                  </View>
+                  ) : null}
                 </View>
-              </View>
 
-              <SectionCard title="Miembros del hogar" subtitle="Las personas que forman parte de este hogar.">
-                {membersError ? <Text style={styles.errorText}>{membersError}</Text> : null}
-                {membersLoading ? <Text style={styles.helperText}>Cargando miembros…</Text> : null}
-
-                {!membersLoading ? (
+                {membersLoading ? (
+                  <ActivityIndicator size="small" color={tokens.colors.primary} style={styles.loader} />
+                ) : membersError ? (
+                  <Text style={styles.errorText}>{membersError}</Text>
+                ) : householdMembers.length === 0 ? (
+                  <Text style={styles.hintText}>No hay miembros visibles todavía.</Text>
+                ) : (
                   <View style={styles.membersList}>
                     {householdMembers.map((member) => {
                       const initials = member.username.trim().slice(0, 2).toUpperCase() || 'M';
                       const isOwner = activeHousehold?.createdBy === member.user_id;
-
                       return (
                         <View key={member.user_id} style={styles.memberRow}>
                           <View style={styles.memberAvatar}>
                             <Text style={styles.memberAvatarText}>{initials}</Text>
                           </View>
-                          <View style={styles.memberTextBlock}>
-                            <View style={styles.memberNameRow}>
-                              <Text style={styles.memberName}>{member.username || 'Miembro'}</Text>
-                              {isOwner ? <Text style={styles.memberRoleBadge}>Propietario</Text> : null}
-                            </View>
-                            <Text style={styles.memberMeta}>{isOwner ? 'Gestiona este hogar' : 'Miembro del hogar'}</Text>
-                          </View>
+                          <Text style={styles.memberName}>{member.username || 'Miembro'}</Text>
+                          {isOwner ? (
+                            <Text style={styles.ownerBadge}>Propietario</Text>
+                          ) : null}
                         </View>
                       );
                     })}
                   </View>
-                ) : null}
+                )}
+              </View>
 
-                {!membersLoading && householdMembers.length === 0 ? (
-                  <Text style={styles.helperText}>Todavía no hay miembros visibles para este hogar.</Text>
-                ) : null}
-              </SectionCard>
+              {/* Invitar */}
+              <View style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Ionicons name="person-add-outline" size={18} color={tokens.colors.primary} />
+                  <Text style={styles.cardTitle}>Invitar a alguien</Text>
+                </View>
+                <Text style={styles.hintText}>Genera un código temporal para que otra persona entre a este hogar.</Text>
 
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={inviteLoading}
+                  onPress={handleCreateInvitation}
+                  style={({ pressed }) => [styles.primaryBtn, (pressed || inviteLoading) && styles.primaryBtnPressed]}
+                >
+                  <Text style={styles.primaryBtnText}>{inviteLoading ? 'Generando…' : 'Crear código'}</Text>
+                </Pressable>
+
+                {inviteCode ? (
+                  <View style={styles.codeBox}>
+                    <Text style={styles.codeLabel}>Código activo</Text>
+                    <Text style={styles.codeValue}>{inviteCode}</Text>
+                    <Text style={styles.codeTimer}>Caduca en {formatRemainingTime(inviteRemainingSeconds)}</Text>
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Cambiar de hogar */}
+              <Pressable
+                accessibilityRole="button"
+                onPress={exitHousehold}
+                style={({ pressed }) => [styles.ghostBtn, pressed && styles.ghostBtnPressed]}
+              >
+                <Ionicons name="swap-horizontal-outline" size={16} color={tokens.colors.textMuted} />
+                <Text style={styles.ghostBtnText}>Cambiar de hogar</Text>
+              </Pressable>
             </>
-          ) : (
-            <>
-              <SectionCard title="Tus hogares" subtitle="Aquí verás los hogares en los que ya estás. Toca uno para entrar.">
-                {error ? <Text style={styles.errorText}>{error}</Text> : null}
-                {loading && !hasLoaded ? <Text style={styles.helperText}>Cargando tus hogares…</Text> : null}
 
-                {hasHouseholds ? (
-                  <View style={styles.householdsListModern}>
+          ) : (
+            /* ── ESCENARIO: SIN hogar activo ── */
+            <>
+              {hasHouseholds ? (
+                <View style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Ionicons name="home-outline" size={18} color={tokens.colors.primary} />
+                    <Text style={styles.cardTitle}>Tus hogares</Text>
+                  </View>
+
+                  <View style={styles.householdsList}>
                     {households.map((household) => (
                       <HouseholdSelectionCard
                         key={household.id}
@@ -463,24 +458,44 @@ export default function HouseholdScreen() {
                       />
                     ))}
                   </View>
-                ) : !loading ? (
-                  <EmptyState
-                    title="Todavía no tienes ningún hogar"
-                    subtitle="Puedes crear uno nuevo o entrar con un código que te envíe otra persona."
-                    actionLabel="Crear o unirme a un hogar"
-                    onAction={() => openAccessModal('create')}
-                  />
-                ) : null}
-              </SectionCard>
 
-              <SectionCard title="¿Necesitas hacer algo más?" subtitle="Crear o unirte es una opción secundaria. Primero mira si tu hogar ya aparece arriba.">
-                <View style={styles.secondaryBlock}>
-                  <Text style={styles.secondaryBlockText}>Si no ves tu hogar en la lista, aquí puedes crear uno nuevo o entrar con un código.</Text>
-                  <SecondaryButton title="Crear o unirme a un hogar" onPress={() => openAccessModal('create')} fullWidth />
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => openAccessModal('create')}
+                    style={({ pressed }) => [styles.ghostBtn, pressed && styles.ghostBtnPressed]}
+                  >
+                    <Ionicons name="add-outline" size={16} color={tokens.colors.textMuted} />
+                    <Text style={styles.ghostBtnText}>Crear o unirme a otro hogar</Text>
+                  </Pressable>
                 </View>
-              </SectionCard>
+              ) : !loading ? (
+                <View style={styles.card}>
+                  <View style={styles.emptyIconWrap}>
+                    <Ionicons name="home-outline" size={32} color={tokens.colors.primary} />
+                  </View>
+                  <Text style={styles.emptyTitle}>Aún no tienes hogar</Text>
+                  <Text style={styles.emptySubtitle}>Crea uno nuevo o entra con un código que te hayan compartido.</Text>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => openAccessModal('create')}
+                    style={({ pressed }) => [styles.primaryBtn, pressed && styles.primaryBtnPressed]}
+                  >
+                    <Text style={styles.primaryBtnText}>Crear hogar</Text>
+                  </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => openAccessModal('join')}
+                    style={({ pressed }) => [styles.secondaryBtn, pressed && styles.secondaryBtnPressed]}
+                  >
+                    <Text style={styles.secondaryBtnText}>Unirme con código</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </>
           )}
+
         </View>
       </SwipeTabs>
 
@@ -510,13 +525,13 @@ export default function HouseholdScreen() {
         onConfirm={() => void confirmLeave()}
         onClose={closeLeaveDialog}
       />
-
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   page: {
+    position: 'relative',
     flexGrow: 1,
     marginHorizontal: -16,
     marginVertical: -16,
@@ -526,51 +541,23 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
   },
   centerText: {
     color: '#111827',
     fontSize: 15,
     fontWeight: '600',
   },
-  noActiveHeroHeader: {
-    backgroundColor: '#E3F1E6',
-    borderBottomWidth: 1,
-    borderBottomColor: '#CFE3D4',
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 22,
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: tokens.colors.background,
   },
-  noActiveHeroContent: {
-    gap: 8,
-    maxWidth: 560,
-  },
-  noActiveHeroBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    backgroundColor: '#F7FBF8',
-    borderWidth: 1,
-    borderColor: '#CFE4D5',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  noActiveHeroBadgeText: {
-    color: tokens.colors.primaryDark,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  noActiveHeroTitle: {
-    color: tokens.colors.text,
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '800',
-  },
-  noActiveHeroSubtitle: {
-    color: '#475467',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    maxWidth: 560,
+  loadingText: {
+    color: tokens.colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
   },
   heroHeader: {
     position: 'relative',
@@ -581,7 +568,7 @@ const styles = StyleSheet.create({
     paddingBottom: 42,
   },
   heroContent: {
-    gap: 6,
+    gap: 4,
     maxWidth: 560,
     zIndex: 2,
   },
@@ -591,18 +578,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  heroTitle: {
-    color: '#FFFFFF',
-    fontSize: 30,
+  pageTitle: {
+    fontSize: 28,
     fontWeight: '800',
-    lineHeight: 34,
-  },
-  heroSubtitle: {
-    color: 'rgba(255,255,255,0.96)',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '600',
-    maxWidth: 520,
+    color: '#FFFFFF',
+    lineHeight: 32,
   },
   heroOrbPrimary: {
     position: 'absolute',
@@ -622,340 +602,193 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  activeHeroHeader: {
-    position: 'relative',
-    overflow: 'hidden',
-    backgroundColor: tokens.colors.primaryDark,
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 34,
-  },
-  activeHeroContent: {
-    gap: 8,
-    maxWidth: 560,
-    zIndex: 2,
-  },
-  activeHeroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  activeHeroBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  activeHeroTitle: {
-    color: '#FFFFFF',
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '800',
-  },
-  activeHeroSubtitle: {
-    color: 'rgba(255,255,255,0.94)',
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    maxWidth: 560,
-  },
   contentStack: {
     marginTop: -18,
     paddingHorizontal: 20,
-    paddingBottom: 0,
+    paddingBottom: 24,
     gap: 14,
   },
-  sectionCard: {
+  card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    padding: 16,
     gap: 12,
     shadowColor: '#101828',
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
+    elevation: 2,
   },
-  activeSummaryCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CFE4D5',
-    borderRadius: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  activeSummaryHeader: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
-  activeSummaryBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    backgroundColor: tokens.colors.primaryDark,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  activeSummaryBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  activeSummaryLabel: {
-    color: '#475467',
-    fontSize: 13,
+  cardTitle: {
+    flex: 1,
+    fontSize: 16,
     fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  activeSummaryName: {
     color: '#111827',
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '800',
   },
-  activeSummaryText: {
-    color: '#475467',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  renameButton: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  countPill: {
+    backgroundColor: tokens.colors.primarySoft,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#CFE4D5',
-    backgroundColor: '#F7FBF8',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  renameButtonPressed: {
-    opacity: 0.95,
-    transform: [{ scale: 0.99 }],
-  },
-  renameButtonText: {
-    color: tokens.colors.primaryDark,
+  countPillText: {
+    color: tokens.colors.primary,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
   },
-  helpIntro: {
-    color: '#344054',
+  hintText: {
+    color: '#667085',
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '600',
-  },
-  helperText: {
-    color: '#475467',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
   },
   errorText: {
     color: '#B42318',
     fontSize: 14,
-    lineHeight: 20,
     fontWeight: '600',
   },
-  householdsListModern: {
-    gap: 12,
-  },
-  secondaryBlock: {
-    gap: 10,
-  },
-  secondaryBlockText: {
-    color: '#475467',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  inviteBlock: {
-    gap: 10,
-  },
-  activeActions: {
-    gap: 12,
-  },
-  inviteBlockHeader: {
-    gap: 2,
-  },
-  inviteBlockTitle: {
-    color: '#111827',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  inviteBlockSubtitle: {
-    color: '#475467',
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-  },
-  inviteCodeCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#B7E4C3',
-    backgroundColor: '#F2FBF5',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  inviteCodeLabel: {
-    color: '#166534',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  inviteCodeValue: {
-    color: '#111827',
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 2,
-    fontFamily: 'monospace',
-  },
-  inviteCodeHelp: {
-    color: '#166534',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
+  loader: {
+    alignSelf: 'flex-start',
   },
   membersList: {
-    gap: 10,
+    gap: 8,
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 4,
+    gap: 10,
   },
   memberAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#EEF7F0',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#EEF7F0',
   },
   memberAvatarText: {
     color: tokens.colors.primaryDark,
     fontSize: 12,
     fontWeight: '800',
   },
-  memberTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  memberNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   memberName: {
+    flex: 1,
     color: '#111827',
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '600',
   },
-  memberRoleBadge: {
+  ownerBadge: {
     color: '#176B3A',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     backgroundColor: '#EEF7F0',
     borderRadius: 999,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 2,
     overflow: 'hidden',
   },
-  memberMeta: {
-    color: '#667085',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
-  renameBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.34)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  renameModalCard: {
-    width: '100%',
-    maxWidth: 420,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    gap: 12,
-  },
-  renameModalTitle: {
-    color: '#111827',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  renameModalSubtitle: {
-    color: '#667085',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  renameInput: {
+  primaryBtn: {
     minHeight: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#D3E2D6',
-    paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
-    color: '#111827',
-    fontSize: 15,
-  },
-  renameActions: {
-    flexDirection: 'column',
-    gap: 10,
-  },
-  primaryAction: {
-    minHeight: 48,
-    borderRadius: 14,
+    borderRadius: 12,
     backgroundColor: tokens.colors.primaryDark,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    shadowColor: tokens.colors.primaryDark,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
   },
-  primaryActionPressed: {
-    opacity: 0.92,
+  primaryBtnPressed: {
+    opacity: 0.85,
   },
-  primaryActionText: {
+  primaryBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '700',
   },
-  secondaryAction: {
+  secondaryBtn: {
     minHeight: 48,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#CFE4D5',
     backgroundColor: '#F7FBF8',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
   },
-  secondaryActionPressed: {
-    opacity: 0.92,
+  secondaryBtnPressed: {
+    opacity: 0.85,
   },
-  secondaryActionText: {
+  secondaryBtnText: {
     color: tokens.colors.primaryDark,
     fontSize: 15,
     fontWeight: '700',
+  },
+  ghostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  ghostBtnPressed: {
+    opacity: 0.55,
+  },
+  ghostBtnText: {
+    color: tokens.colors.textMuted,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  codeBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#B7E4C3',
+    backgroundColor: '#F2FBF5',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+    alignItems: 'center',
+  },
+  codeLabel: {
+    color: '#166534',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  codeValue: {
+    color: '#111827',
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 4,
+    fontFamily: 'monospace',
+  },
+  codeTimer: {
+    color: '#166534',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  householdsList: {
+    gap: 10,
+  },
+  emptyIconWrap: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
+    backgroundColor: tokens.colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: '#667085',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
